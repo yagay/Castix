@@ -43,7 +43,8 @@ class MainViewModel(
             selectedEngine = appSettingsManager.getSelectedEngine() ?: EngineType.SHIZUKU,
             isFloatingButtonEnabled = targetAppsRepo.isFloatingButtonEnabled(),
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
-            selectedTargetPackages = targetAppsRepo.getSelectedPackages()
+            selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
+            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled()
         )
     )
     val uiState: StateFlow<PrivilegeUiState> = _uiState.asStateFlow()
@@ -842,18 +843,21 @@ class MainViewModel(
     }
 
     fun toggleLSPosedModule(active: Boolean) {
-        // LSPosed runtime hook installation cannot be toggled by changing a preference.
-        // Never mark an unimplemented audio hook as active.
+        targetAppsRepo.setAudioFocusGuardEnabled(active)
         _uiState.update {
-            it.copy(notificationMessage = "LSPosed playback hooks are not installed in this build. Configure module scope in LSPosed Manager.")
+            it.copy(
+                isAudioFocusGuardEnabled = active,
+                notificationMessage = if (active)
+                    "Audio focus guard opted in. Select target apps, enable their LSPosed scope and restart them."
+                else "Audio focus guard disabled (restart scoped apps to remove hooks)."
+            )
         }
         appendConsoleLog(
             ConsoleEntry(
                 engine = EngineType.LSPOSED,
-                command = "lsposed::toggle_hook --active=$active",
-                exitCode = 3,
-                output = "Unsupported: no audio focus / playback hook is installed.",
-                isError = true,
+                command = "lsposed::set_audio_focus_policy --enabled=$active",
+                exitCode = 0,
+                output = "Saved local hook policy only. This does not confirm the hook is installed in any target process.",
                 durationMs = 0L
             )
         )
