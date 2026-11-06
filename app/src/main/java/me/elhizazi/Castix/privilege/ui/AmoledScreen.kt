@@ -706,8 +706,8 @@ fun AmoledScreen(
                     // NOT lie to the player about Keyguard or Activity lifecycle.
                     AmoledSwitchRow(
                         icon = Icons.Default.PowerSettingsNew,
-                        title = "Physical screen-off · no lock (Root / Extinguish)",
-                        description = "Recommended for video: turn off the real panel while Android stays interactive. No password protection while this mode runs.",
+                        title = AppStrings.get("screen_mode_physical_title", lang),
+                        description = AppStrings.get("screen_mode_physical_desc", lang),
                         checked = uiState.displayMode == DisplayMode.PHYSICAL_OFF,
                         onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.PHYSICAL_OFF) }
                     )
@@ -719,8 +719,8 @@ fun AmoledScreen(
 
                     AmoledSwitchRow(
                         icon = Icons.Default.Security,
-                        title = "Real system lock · playback compatibility",
-                        description = "Root sends Android's normal sleep command. ColorOS keyguard and native wake gestures stay intact; some apps may pause.",
+                        title = AppStrings.get("screen_mode_lock_title", lang),
+                        description = AppStrings.get("screen_mode_lock_desc", lang),
                         checked = uiState.displayMode == DisplayMode.SYSTEM_LOCK,
                         onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.SYSTEM_LOCK) }
                     )
@@ -732,8 +732,8 @@ fun AmoledScreen(
 
                     AmoledSwitchRow(
                         icon = Icons.Default.BrightnessLow,
-                        title = "AMOLED overlay · manual fallback",
-                        description = "Only covers the screen with black and lowers brightness; the physical panel remains on.",
+                        title = AppStrings.get("screen_mode_overlay_title", lang),
+                        description = AppStrings.get("screen_mode_overlay_desc", lang),
                         checked = uiState.displayMode == DisplayMode.AMOLED_OVERLAY,
                         onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.AMOLED_OVERLAY) }
                     )
@@ -745,8 +745,8 @@ fun AmoledScreen(
 
                     AmoledSwitchRow(
                         icon = Icons.Default.Security,
-                        title = "30-second safety recovery test",
-                        description = "Automatically restore the physical display after 30 seconds. Keep enabled until Root wake events work on your phone.",
+                        title = AppStrings.get("screen_mode_safety_title", lang),
+                        description = AppStrings.get("screen_mode_safety_desc", lang),
                         checked = uiState.rootDisplaySafetyTestMode,
                         onCheckedChange = { viewModel.setRootDisplaySafetyTestMode(it) }
                     )
