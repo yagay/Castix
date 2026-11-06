@@ -374,8 +374,13 @@ class FloatingOverlayManager(private val context: Context) {
 
     private fun onFloatingButtonClicked() {
         vibrateFeedback()
-        // Immediately turn off the screen using pure AMOLED Black Screen overlay
-        BlackScreenOverlayManager.getInstance(context).showBlackScreen()
+        // Root physical panel-off is preferred; the original AMOLED overlay is opt-in.
+        if (me.elhizazi.Castix.display.RootDisplayPreferences.preferRoot(context)) {
+            CastixBackgroundService.start(context)
+            me.elhizazi.Castix.display.RootDisplayManager.getInstance(context).toggle()
+        } else {
+            BlackScreenOverlayManager.getInstance(context).showBlackScreen()
+        }
     }
 
     private fun openSettingsUi() {
