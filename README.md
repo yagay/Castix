@@ -19,6 +19,22 @@ Castix is an Android utility for managing background playback and related playba
 - Some features require an appropriate backend to be installed and configured on the device.
 - Root, Shizuku, Dhizuku, LSPosed, LSPatch, and Accessibility features are optional; Castix does not require all of them at the same time.
 
+## Language support / 语言支持
+
+Castix supports **English** and **简体中文** for the Root/Extinguish screen modes,
+secure lock, home controls, Quick Settings tile, and related error/status
+messages. Language selection is available under Settings; **Auto** follows
+the Android system language (Chinese system locales use Simplified Chinese).
+
+Root and LSPosed command identifiers, Android class/method names, and raw
+diagnostic shell output are not translated. Existing community translations
+remain available; new feature strings use English fallback where those
+translations have not yet been extended.
+
+新增 Root/Extinguish 物理熄屏、系统锁屏、首页操作、快捷设置磁贴及相关提示均支持
+**简体中文和英文**。可在应用设置中选择语言，使用“自动”时跟随系统语言。
+命令、类名和原始诊断日志仍保留其技术原文，旧版其他语言翻译继续保留。
+
 ## Screen control modes (experimental branch)
 
 Castix offers three mutually exclusive screen actions. See
