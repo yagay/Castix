@@ -71,8 +71,12 @@ class BlackScreenTileService : TileService() {
         }
 
         if (RootDisplayPreferences.preferRoot(app)) {
-            CastixBackgroundService.start(app)
-            RootDisplayManager.getInstance(app).toggle()
+            runCatching {
+                CastixBackgroundService.start(app)
+                RootDisplayManager.getInstance(app).toggle()
+            }.onFailure { error ->
+                android.util.Log.e("CastixRootTile", "Cannot start root display controller", error)
+            }
         } else {
             BlackScreenOverlayManager.getInstance(app).toggleBlackScreen()
         }
