@@ -21,6 +21,8 @@ import androidx.core.app.NotificationCompat
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
 import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.DisplayMode
+import me.elhizazi.Castix.display.ScreenModeController
 import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,11 +91,13 @@ class CastixBackgroundService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_BLACK_SCREEN -> {
-                if (RootDisplayPreferences.preferRoot(this)) {
-                    RootDisplayManager.getInstance(this).toggle()
-                } else {
-                    BlackScreenOverlayManager.getInstance(this).toggleBlackScreen()
+                // A notification PendingIntent can start this service cold. Become
+                // foreground before executing any screen or lock operation.
+                if (!_isServiceRunning.value) {
+                    startForegroundNotification()
+                    _isServiceRunning.value = true
                 }
+                ScreenModeController.activate(this)
                 return START_STICKY
             }
             ACTION_REFRESH_OVERLAY -> {
