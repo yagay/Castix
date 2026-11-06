@@ -933,9 +933,10 @@ class MainViewModel(
 
     fun setPreferRootPhysicalDisplay(enabled: Boolean) {
         val app = getApplication<Application>()
-        if (RootDisplayManager.getInstance(app).state.value.isOff) {
+        if (RootDisplayManager.getInstance(app).state.value.isOff ||
+            me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value) {
             _uiState.update {
-                it.copy(notificationMessage = "Restore the physical display before switching modes.")
+                it.copy(notificationMessage = "Restore the screen before switching display modes.")
             }
             return
         }
