@@ -39,16 +39,32 @@ class ScreenModeLocalizationTest {
     }
 
     @Test
-    fun autoLanguageUsesChinesePhoneLanguage() {
-        val old = Locale.getDefault()
+    fun explicitChineseAndEnglishLanguageTagsAreAccepted() {
+        assertEquals(
+            AppStrings.get("screen_mode_physical_title", "zh"),
+            AppStrings.get("screen_mode_physical_title", "zh-CN")
+        )
+        assertEquals(
+            AppStrings.get("screen_mode_physical_title", "en"),
+            AppStrings.get("screen_mode_physical_title", "en-GB")
+        )
+    }
+
+    @Test
+    fun autoLanguageReadsDeviceLocaleNotLastManuallySelectedLocale() {
+        val deviceLanguage = android.content.res.Resources.getSystem()
+            .configuration.locales[0].language
+        val expected = AppStrings.get("screen_mode_physical_title", deviceLanguage)
+        val previous = Locale.getDefault()
         try {
-            Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+            // A manually changed default locale must not override the OS locale.
+            Locale.setDefault(Locale(if (deviceLanguage == "zh") "en" else "zh"))
             assertEquals(
-                AppStrings.get("screen_mode_physical_title", "zh"),
+                expected,
                 AppStrings.get("screen_mode_physical_title", "auto")
             )
         } finally {
-            Locale.setDefault(old)
+            Locale.setDefault(previous)
         }
     }
 }
