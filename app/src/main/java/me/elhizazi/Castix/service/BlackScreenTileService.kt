@@ -9,10 +9,13 @@ import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.RootDisplayPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -28,11 +31,13 @@ class BlackScreenTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
-        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value)
+        observeJob?.cancel()
+        val root = RootDisplayManager.getInstance(applicationContext)
+        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value || root.state.value.isOff)
         observeJob = serviceScope.launch {
-            BlackScreenOverlayManager.isBlackScreenActive.collectLatest { isActive ->
-                updateTileState(isActive)
-            }
+            combine(BlackScreenOverlayManager.isBlackScreenActive, root.state) { overlay, physical ->
+                overlay || physical.isOff
+            }.collectLatest { updateTileState(it) }
         }
     }
 
@@ -65,18 +70,20 @@ class BlackScreenTileService : TileService() {
             return
         }
 
-        // Toggle Black Screen AMOLED Edge-to-Edge
-        val manager = BlackScreenOverlayManager.getInstance(app)
-        manager.toggleBlackScreen()
-        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value)
+        if (RootDisplayPreferences.preferRoot(app)) {
+            CastixBackgroundService.start(app)
+            RootDisplayManager.getInstance(app).toggle()
+        } else {
+            BlackScreenOverlayManager.getInstance(app).toggleBlackScreen()
+        }
     }
 
     private fun updateTileState(isActive: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = if (isActive) "إلغاء الشاشة السوداء" else "إطفاء الشاشة"
+        tile.label = if (isActive) "Restore display" else "Turn display off"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (isActive) "AMOLED شغال" else "Castix"
+            tile.subtitle = if (RootDisplayPreferences.preferRoot(applicationContext)) "Root / Extinguish" else "AMOLED overlay"
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_black_screen)
         tile.updateTile()
