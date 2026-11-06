@@ -152,44 +152,55 @@ class ShizukuEngine : IPrivilegeEngine {
         }
     }
 
+    /**
+     * Execute only through the authorized Shizuku remote process.
+     * Never pretend a normal app-shell command was dispatched through Binder.
+     * Shizuku.newProcess is a legacy compatibility path; on unsupported versions
+     * report failure rather than executing with the wrong identity.
+     */
+    @Suppress("DEPRECATION")
     override suspend fun executeCommand(command: String): ExecutionResult = withContext(Dispatchers.IO) {
-        val startTime = SystemClock.elapsedRealtime()
-
-        // Shizuku executes via remote Binder proxy (or local runtime fallback in dev/test)
-        val sanitizedCmd = command.trim()
-        var duration = 0L
-
+        val started = SystemClock.elapsedRealtime()
+        val cmd = command.trim()
+        if (cmd.isEmpty()) {
+            return@withContext ExecutionResult(cmd, 2, "", "Empty command", 0L, EngineType.SHIZUKU)
+        }
+        if (!runCatching { Shizuku.pingBinder() &&
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }.getOrDefault(false)) {
+            return@withContext ExecutionResult(cmd, 1, "", "Shizuku is not connected or authorized", 0L, EngineType.SHIZUKU)
+        }
+        var process: Process? = null
         try {
-            // In Android 17, Shizuku invokes ShizukuRemoteProcess / Binder transact
-            // If Shizuku service is not active, run local fallback with informative Binder log
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", sanitizedCmd))
-            val stdout = process.inputStream.bufferedReader().use { it.readText() }
-            val stderr = process.errorStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-            duration = SystemClock.elapsedRealtime() - startTime
-
-            val formattedStdout = if (stdout.isBlank() && exitCode == 0) {
-                "[Shizuku Binder IPC: Command dispatched successfully to remote daemon (UID 2000)]"
-            } else {
-                stdout.trim()
-            }
-
+            process = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+            val current = process
+            val stdout = java.io.ByteArrayOutputStream()
+            val stderr = java.io.ByteArrayOutputStream()
+            val outReader = Thread({
+                try { current.inputStream.use { it.copyTo(stdout) } } catch (_: Exception) {}
+            }, "Castix-shizuku-stdout").apply { isDaemon = true; start() }
+            val errReader = Thread({
+                try { current.errorStream.use { it.copyTo(stderr) } } catch (_: Exception) {}
+            }, "Castix-shizuku-stderr").apply { isDaemon = true; start() }
+            val completed = current.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)
+            if (!completed) current.destroyForcibly()
+            outReader.join(1500)
+            errReader.join(1500)
             ExecutionResult(
-                command = sanitizedCmd,
-                exitCode = exitCode,
-                stdout = formattedStdout,
-                stderr = stderr.trim(),
-                executionTimeMs = duration,
+                command = cmd,
+                exitCode = if (completed) current.exitValue() else -1,
+                stdout = stdout.toString("UTF-8").trim(),
+                stderr = if (completed) stderr.toString("UTF-8").trim() else "Shizuku command timed out after 20 seconds",
+                executionTimeMs = SystemClock.elapsedRealtime() - started,
                 engineUsed = EngineType.SHIZUKU
             )
         } catch (e: Exception) {
-            duration = SystemClock.elapsedRealtime() - startTime
+            process?.destroyForcibly()
             ExecutionResult(
-                command = sanitizedCmd,
+                command = cmd,
                 exitCode = -1,
                 stdout = "",
-                stderr = "Shizuku Binder IPC dispatch error: ${e.localizedMessage}",
-                executionTimeMs = duration,
+                stderr = "Shizuku remote execution is unavailable: ${e.localizedMessage}",
+                executionTimeMs = SystemClock.elapsedRealtime() - started,
                 engineUsed = EngineType.SHIZUKU
             )
         }
@@ -199,6 +210,9 @@ class ShizukuEngine : IPrivilegeEngine {
         task: PlaybackOptimizationTask,
         targetPackage: String
     ): ExecutionResult {
+        if (!targetPackage.matches(Regex("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+"))) {
+            return ExecutionResult("", 2, "", "Invalid target package", 0L, EngineType.SHIZUKU)
+        }
         val cmd = when (task) {
             PlaybackOptimizationTask.BATTERY_WHITELIST ->
                 "dumpsys deviceidle whitelist +$targetPackage"
@@ -206,12 +220,13 @@ class ShizukuEngine : IPrivilegeEngine {
                 "am set-standby-bucket $targetPackage active"
             PlaybackOptimizationTask.APP_OPS_BACKGROUND ->
                 "cmd appops set $targetPackage RUN_IN_BACKGROUND allow && cmd appops set $targetPackage WAKE_LOCK allow"
-            PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE ->
-                "setprop sys.fflag.override.settings_enable_monitor_phantom_procs false"
-            PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK ->
-                "cmd media_session dispatch-command --package $targetPackage --action android.media.session.extra.AUDIO_FOCUS_PRIORITY"
+            PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE, PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK -> null
         }
-        return executeCommand(cmd)
+        return if (cmd != null) executeCommand(cmd) else ExecutionResult(
+            "playback::${task.name}", 3, "",
+            "Unsupported: ${task.name} has no safe Shizuku implementation.",
+            0L, EngineType.SHIZUKU
+        )
     }
 
     override suspend fun getHealth(context: Context): ServiceHealth = withContext(Dispatchers.IO) {
