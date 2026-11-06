@@ -149,8 +149,12 @@ class RootDisplayManager private constructor(private val context: Context) {
             Log.e(TAG, "Cannot enter physical display-off mode", e)
             // The display call may have partially succeeded. Always attempt ON.
             val restored = runPowerOn()
-            stopInputWatcher()
-            if (restored) clearWatchdog()
+            // If the panel is still dark, keep the root key watcher running so
+            // the user retains a way to retry. The detached watchdog also remains.
+            if (restored) {
+                stopInputWatcher()
+                clearWatchdog()
+            }
             // Even a failed power-mode call can leave the display ON. Never leave
             // an invisible touch blocker attached over a visible working screen.
             withContext(Dispatchers.Main) {
