@@ -21,6 +21,8 @@ internal object AppStringsSecondary {
         ) + AppStringsEuropean.maps
 
     val zh = mapOf(
+        "screen_root_watchdog_failed" to "无法安装 Root 屏幕自动恢复计时器。",
+        "screen_root_watcher_failed" to "无法启用 Root 输入监听，因此未关闭物理屏幕。",
         "settings_saved" to "设置已保存。",
         "screen_msg_tasks_complete" to " 项命令已完成",
         "screen_msg_command_success" to "命令已执行，但不保证播放器持续播放。",
