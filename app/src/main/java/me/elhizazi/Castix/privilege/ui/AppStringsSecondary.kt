@@ -21,6 +21,12 @@ internal object AppStringsSecondary {
         ) + AppStringsEuropean.maps
 
     val zh = mapOf(
+        "settings_saved" to "设置已保存。",
+        "screen_msg_tasks_complete" to " 项命令已完成",
+        "screen_msg_command_success" to "命令已执行，但不保证播放器持续播放。",
+        "screen_msg_command_failed" to "执行后端报告失败。",
+        "screen_msg_unexpected_failure" to "执行后端发生意外错误。",
+        "screen_error_unsupported" to "当前设备不支持所请求的功能。",
         "screen_mode_physical_title" to "物理熄屏 · 不锁屏（Root / Extinguish）",
         "screen_mode_physical_desc" to "推荐用于视频播放：关闭真实屏幕，Android 仍保持交互状态。此模式不提供密码锁保护。",
         "screen_mode_lock_title" to "真正系统锁屏 · 播放兼容",
