@@ -48,6 +48,7 @@ class RootDisplayManager private constructor(private val context: Context) {
     companion object {
         private const val TAG = "CastixRootDisplay"
         private const val WATCHDOG_SECONDS = 2 * 60 * 60 // Hard recovery if app dies.
+        private const val SAFETY_TEST_SECONDS = 30
         private const val DOUBLE_TAP_WINDOW_MS = 400L
         private const val VOLUME_RECOVERY_WINDOW_MS = 700L
 
@@ -120,6 +121,12 @@ class RootDisplayManager private constructor(private val context: Context) {
                         result.stderr.ifBlank { result.stdout.takeLast(400) })
             }
             _state.value = DisplayState(Status.OFF)
+            if (RootDisplayPreferences.safetyTestMode(context)) {
+                scope.launch {
+                    kotlinx.coroutines.delay((SAFETY_TEST_SECONDS + 2) * 1000L)
+                    if (sessionMarker == marker && _state.value.status == Status.OFF) restore()
+                }
+            }
             Log.i(TAG, "Physical panel power set to OFF; Android remains interactive")
         } catch (e: Exception) {
             Log.e(TAG, "Cannot enter physical display-off mode", e)
@@ -176,8 +183,10 @@ class RootDisplayManager private constructor(private val context: Context) {
         val id = shellQuote(marker)
         val file = shellQuote(markerPath)
         val on = displayCommand("on")
+        val safetySeconds = if (RootDisplayPreferences.safetyTestMode(context))
+            SAFETY_TEST_SECONDS else WATCHDOG_SECONDS
         val command = "printf %s $id > $file || exit 1; " +
-            "(sleep $WATCHDOG_SECONDS; " +
+            "(sleep $safetySeconds; " +
             "if [ \"\$(cat $file 2>/dev/null)\" = $id ]; then " +
             "$on >/dev/null 2>&1; rm -f $file; fi) " +
             "</dev/null >/dev/null 2>&1 &"
