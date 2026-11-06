@@ -39,6 +39,27 @@ class ScreenModeLocalizationTest {
     }
 
     @Test
+    fun privilegeAndServiceMessagesHaveBothLanguages() {
+        val keys = AppStrings.en.keys.filter { it.startsWith("notice_") }
+        assertTrue("Expected Root, Shizuku and LSPosed status translations", keys.size >= 20)
+        for (key in keys) {
+            val english = AppStrings.get(key, "en")
+            val chinese = AppStrings.get(key, "zh")
+            assertTrue("Empty English notice: $key", english.isNotBlank())
+            assertTrue("Empty Chinese notice: $key", chinese.isNotBlank())
+            assertNotEquals("Chinese notice missing: $key", english, chinese)
+        }
+        assertEquals(
+            "当前引擎已切换为 Root。",
+            AppStrings.get("notice_engine_switched", "zh", "Root")
+        )
+        assertEquals(
+            "Active engine changed to Root.",
+            AppStrings.get("notice_engine_switched", "en", "Root")
+        )
+    }
+
+    @Test
     fun explicitChineseAndEnglishLanguageTagsAreAccepted() {
         assertEquals(
             AppStrings.get("screen_mode_physical_title", "zh"),
