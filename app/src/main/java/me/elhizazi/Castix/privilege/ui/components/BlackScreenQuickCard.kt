@@ -133,8 +133,8 @@ fun BlackScreenQuickCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (secureLock) "Real system lock" else if (displayMode == DisplayMode.PHYSICAL_OFF)
-                            "Physical panel-off" else AppStrings.text("black_screen_title"),
+                        text = if (secureLock) AppStrings.text("screen_home_lock_title") else if (displayMode == DisplayMode.PHYSICAL_OFF)
+                            AppStrings.text("screen_home_physical_title") else AppStrings.text("black_screen_title"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -142,9 +142,9 @@ fun BlackScreenQuickCard(
                     )
                     Text(
                         text = if (secureLock)
-                            "Normal Android / ColorOS keyguard; background playback depends on the app."
+                            AppStrings.text("screen_home_lock_desc")
                             else if (displayMode == DisplayMode.PHYSICAL_OFF)
-                            "Root / Extinguish: display OFF without keyguard or Activity pause."
+                            AppStrings.text("screen_home_physical_desc")
                             else AppStrings.text("black_screen_desc"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -193,13 +193,13 @@ fun BlackScreenQuickCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (secureLock) "KEYGUARD" else AppStrings.text("save_power_badge"),
+                        text = if (secureLock) AppStrings.text("screen_home_keyguard") else AppStrings.text("save_power_badge"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = NeonGreen
                     )
                     Text(
-                        text = if (secureLock) "Secure sleep" else AppStrings.text("black_screen_playing_fallback"),
+                        text = if (secureLock) AppStrings.text("screen_home_secure_sleep") else AppStrings.text("black_screen_playing_fallback"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -269,7 +269,7 @@ fun BlackScreenQuickCard(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = if (secureLock) "Lock screen" else if (isBlackScreenActive) {
+                    text = if (secureLock) AppStrings.text("screen_home_lock_action") else if (isBlackScreenActive) {
                             AppStrings.text("black_screen_action_off")
                         } else {
                             AppStrings.text("black_screen_action_on")
@@ -283,9 +283,9 @@ fun BlackScreenQuickCard(
             // Tip note
             Text(
                 text = if (secureLock)
-                    "True Android sleep/lock. No fake unlocked state; LSPosed support is per app."
+                    AppStrings.text("screen_home_lock_tip")
                     else if (displayMode == DisplayMode.PHYSICAL_OFF)
-                    "No screen lock in this mode. Transparent guard consumes app-area touches."
+                    AppStrings.text("screen_home_physical_tip")
                     else AppStrings.text("black_screen_tip"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
