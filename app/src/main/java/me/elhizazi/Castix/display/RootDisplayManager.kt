@@ -174,9 +174,9 @@ class RootDisplayManager private constructor(private val context: Context) {
         val id = shellQuote(marker)
         val file = shellQuote(markerPath)
         val on = displayCommand("on")
-        val command = "printf %s $id > $file && " +
+        val command = "printf %s $id > $file || exit 1; " +
             "(sleep $WATCHDOG_SECONDS; " +
-            "if [ \"\\$(cat $file 2>/dev/null)\" = $id ]; then " +
+            "if [ \"\$(cat $file 2>/dev/null)\" = $id ]; then " +
             "$on >/dev/null 2>&1; rm -f $file; fi) " +
             "</dev/null >/dev/null 2>&1 &"
         return root.executeCommand(command).isSuccess
