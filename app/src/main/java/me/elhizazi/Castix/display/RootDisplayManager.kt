@@ -126,8 +126,10 @@ class RootDisplayManager private constructor(private val context: Context) {
             // The display call may have partially succeeded. Always attempt ON.
             val restored = runPowerOn()
             stopInputWatcher()
-            if (restored) clearWatchdog()
-            withContext(Dispatchers.Main) { detachKeepAwakeView() }
+            if (restored) {
+                clearWatchdog()
+                withContext(Dispatchers.Main) { detachKeepAwakeView() }
+            }
             _state.value = DisplayState(Status.ERROR, e.localizedMessage ?: "Root display OFF failed")
         }
     }
@@ -236,11 +238,16 @@ class RootDisplayManager private constructor(private val context: Context) {
                             continue
                         }
                         if (eventUp && line.contains("BTN_TOUCH")) {
-                            if (now - lastTouchUp in 80..DOUBLE_TAP_WINDOW_MS) restore()
+                            val doubleTapEnabled = context
+                                .getSharedPreferences("castix_black_screen_prefs", Context.MODE_PRIVATE)
+                                .getBoolean("double_tap_to_wake", true)
+                            if (doubleTapEnabled && now - lastTouchUp in 80L..DOUBLE_TAP_WINDOW_MS) {
+                                restore()
+                            }
                             lastTouchUp = now
                         }
                         if (eventUp && line.contains("KEY_VOLUMEUP")) {
-                            if (now - lastVolumeUp in 80..VOLUME_RECOVERY_WINDOW_MS) restore()
+                            if (now - lastVolumeUp in 80L..VOLUME_RECOVERY_WINDOW_MS) restore()
                             lastVolumeUp = now
                         }
                     }
