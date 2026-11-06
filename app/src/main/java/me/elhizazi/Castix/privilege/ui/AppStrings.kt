@@ -71,6 +71,12 @@ object AppStrings {
     }
 
     val en = mapOf(
+        "settings_saved" to "Settings saved.",
+        "screen_msg_tasks_complete" to " commands completed",
+        "screen_msg_command_success" to "Command completed; this does not guarantee continued playback.",
+        "screen_msg_command_failed" to "Backend reported a failure.",
+        "screen_msg_unexpected_failure" to "Unexpected backend error.",
+        "screen_error_unsupported" to "The requested function is not supported on this device.",
         "screen_mode_physical_title" to "Physical screen-off · no lock (Root / Extinguish)",
         "screen_mode_physical_desc" to "Recommended for video: the physical panel turns off while Android stays interactive. This is not password protection.",
         "screen_mode_lock_title" to "Real system lock · playback compatibility",
