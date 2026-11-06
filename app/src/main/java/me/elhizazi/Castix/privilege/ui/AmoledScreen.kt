@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TouchApp
@@ -700,7 +701,22 @@ fun AmoledScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
-                    // Double Tap to Wake
+                    // Preferred mode is the Extinguish physical panel power path,
+                    // executed as Root. 1x1 keep-awake overlay is not a black overlay.
+                    AmoledSwitchRow(
+                        icon = Icons.Default.PowerSettingsNew,
+                        title = "Real screen power-off (Root / Extinguish)",
+                        description = "Prefer Root to switch off the physical display panel. If disabled, use the original AMOLED black overlay. Wake gestures may vary by device.",
+                        checked = uiState.preferRootPhysicalDisplay,
+                        onCheckedChange = { viewModel.setPreferRootPhysicalDisplay(it) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    // Double Tap to Wake (AMOLED overlay, or best-effort Root input listener).
                     AmoledSwitchRow(
                         icon = Icons.Default.TouchApp,
                         title = AppStrings.get("settings_double_tap_wake", lang),
