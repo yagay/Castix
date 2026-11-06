@@ -35,11 +35,20 @@ object AppStrings {
         get() = coreCodes + AppStringsSecondary.languages.map { it.code }
 
     fun resolveEffectiveLanguage(lang: String): String {
+        // Accept both short codes and language tags (e.g. zh-CN or en-GB).
         val normalized = lang.trim().lowercase(Locale.ROOT)
-        if (normalized in supportedCodes) return normalized
+        val baseLanguage = normalized.substringBefore('-').substringBefore('_')
+        if (normalized != "auto" && baseLanguage in supportedCodes) return baseLanguage
 
-        val systemLanguage = Locale.getDefault().language.lowercase(Locale.ROOT)
-        return if (systemLanguage in supportedCodes) systemLanguage else "en"
+        // Use the device locale, not Locale.getDefault(): the latter is modified
+        // when Castix switches to a manually selected app language, making
+        // "Auto" incorrectly keep that previously selected language.
+        val systemLanguage = runCatching {
+            android.content.res.Resources.getSystem().configuration.locales[0]
+                .language.lowercase(Locale.ROOT)
+        }.getOrElse { Locale.getDefault().language.lowercase(Locale.ROOT) }
+        val systemBase = systemLanguage.substringBefore('-').substringBefore('_')
+        return if (systemBase in supportedCodes) systemBase else "en"
     }
 
     fun get(key: String, lang: String = "auto", vararg args: Any?): String {
