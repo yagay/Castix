@@ -9,6 +9,7 @@ import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
+import me.elhizazi.Castix.privilege.ui.AppStrings
 import me.elhizazi.Castix.display.RootDisplayManager
 import me.elhizazi.Castix.display.DisplayMode
 import me.elhizazi.Castix.display.RootDisplayPreferences
@@ -81,15 +82,15 @@ class BlackScreenTileService : TileService() {
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         val mode = RootDisplayPreferences.mode(applicationContext)
         tile.label = when {
-            mode == DisplayMode.SYSTEM_LOCK -> "Lock screen"
-            isActive -> "Restore display"
-            else -> "Turn display off"
+            mode == DisplayMode.SYSTEM_LOCK -> AppStrings.getForContext(applicationContext, "screen_tile_lock")
+            isActive -> AppStrings.getForContext(applicationContext, "screen_tile_restore")
+            else -> AppStrings.getForContext(applicationContext, "screen_tile_off")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = when (mode) {
-                DisplayMode.PHYSICAL_OFF -> "Physical panel · Root"
-                DisplayMode.SYSTEM_LOCK -> "ColorOS keyguard"
-                DisplayMode.AMOLED_OVERLAY -> "AMOLED overlay"
+                DisplayMode.PHYSICAL_OFF -> AppStrings.getForContext(applicationContext, "screen_tile_root")
+                DisplayMode.SYSTEM_LOCK -> AppStrings.getForContext(applicationContext, "screen_tile_keyguard")
+                DisplayMode.AMOLED_OVERLAY -> AppStrings.getForContext(applicationContext, "screen_tile_overlay")
             }
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_black_screen)
