@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import me.elhizazi.Castix.privilege.ui.AppStrings
 import me.elhizazi.Castix.privilege.domain.engine.RootEngine
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -64,6 +65,7 @@ class RootDisplayManager private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val root = RootEngine()
+    private fun tr(key: String): String = AppStrings.getForContext(context, key)
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val keepAwakeView = View(context)
     private val inputGuard = InputGuardHost(context) { restore() }
@@ -103,11 +105,11 @@ class RootDisplayManager private constructor(private val context: Context) {
         _state.value = DisplayState(Status.TURNING_OFF)
         if (!Settings.canDrawOverlays(context)) {
             _state.value = DisplayState(
-                Status.ON, "Overlay permission is needed for physical-off touch protection.")
+                Status.ON, tr("screen_root_overlay_required"))
             return
         }
         if (!root.checkPermission(context)) {
-            _state.value = DisplayState(Status.ON, "Root (su) access is required.")
+            _state.value = DisplayState(Status.ON, tr("screen_root_permission_required"))
             return
         }
 
@@ -124,17 +126,17 @@ class RootDisplayManager private constructor(private val context: Context) {
             val marker = "castix_${System.currentTimeMillis()}_${SystemClock.elapsedRealtime()}"
             val watchdog = installWatchdog(marker)
             if (!watchdog) {
-                throw IllegalStateException("Root recovery watchdog could not be installed")
+                throw IllegalStateException(tr("screen_root_watchdog_failed"))
             }
             sessionMarker = marker
             if (!startInputWatcher()) {
-                throw IllegalStateException("Root input watcher unavailable; physical display remains ON")
+                throw IllegalStateException(tr("screen_root_watcher_failed"))
             }
 
             val result = root.executeCommand(displayCommand("off"))
             if (!result.isSuccess || !result.stdout.contains("CASTIX_DISPLAY_OFF_OK")) {
                 throw IllegalStateException(
-                    "Extinguish display power OFF failed: " +
+                    tr("screen_root_off_failed") +
                         result.stderr.ifBlank { result.stdout.takeLast(400) })
             }
             _state.value = DisplayState(Status.OFF)
@@ -164,7 +166,7 @@ class RootDisplayManager private constructor(private val context: Context) {
             if (restored) releaseSessionWakeLock()
             _state.value = DisplayState(
                 if (restored) Status.ON else Status.ERROR,
-                e.localizedMessage ?: "Root display OFF failed"
+                e.localizedMessage ?: tr("screen_root_off_error")
             )
         }
     }
@@ -185,7 +187,7 @@ class RootDisplayManager private constructor(private val context: Context) {
         } else {
             _state.value = DisplayState(
                 Status.ERROR,
-                "Root display restore failed. Use adb shell su -c with the recovery command in docs/ROOT_DISPLAY.md.")
+                tr("screen_root_restore_failed"))
         }
     }
 
