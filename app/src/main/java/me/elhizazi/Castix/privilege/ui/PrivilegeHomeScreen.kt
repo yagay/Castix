@@ -229,7 +229,7 @@ fun PrivilegeHomeScreen(
                                     activeEngine = uiState.selectedEngine,
                                     activeTasks = uiState.activePlaybackTasks,
                                     isExecuting = uiState.isExecuting,
-                                    isLSPosedHookActive = uiState.isLSPosedHookActive,
+                                    isLSPosedHookActive = uiState.isAudioFocusGuardEnabled,
                                     onExecuteTask = { task ->
                                         viewModel.executePlaybackTask(task)
                                     },
