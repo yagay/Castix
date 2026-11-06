@@ -103,11 +103,11 @@ class RootDisplayManager private constructor(private val context: Context) {
         _state.value = DisplayState(Status.TURNING_OFF)
         if (!Settings.canDrawOverlays(context)) {
             _state.value = DisplayState(
-                Status.ERROR, "Grant Display over other apps for the 1x1 keep-awake host.")
+                Status.ON, "Overlay permission is needed for physical-off touch protection.")
             return
         }
         if (!root.checkPermission(context)) {
-            _state.value = DisplayState(Status.ERROR, "Root (su) access is required.")
+            _state.value = DisplayState(Status.ON, "Root (su) access is required.")
             return
         }
 
@@ -150,15 +150,18 @@ class RootDisplayManager private constructor(private val context: Context) {
             // The display call may have partially succeeded. Always attempt ON.
             val restored = runPowerOn()
             stopInputWatcher()
-            if (restored) {
-                clearWatchdog()
-                withContext(Dispatchers.Main) {
-                    inputGuard.detach()
-                    detachKeepAwakeView()
-                }
-                releaseSessionWakeLock()
+            if (restored) clearWatchdog()
+            // Even a failed power-mode call can leave the display ON. Never leave
+            // an invisible touch blocker attached over a visible working screen.
+            withContext(Dispatchers.Main) {
+                inputGuard.detach()
+                if (restored) detachKeepAwakeView()
             }
-            _state.value = DisplayState(Status.ERROR, e.localizedMessage ?: "Root display OFF failed")
+            if (restored) releaseSessionWakeLock()
+            _state.value = DisplayState(
+                if (restored) Status.ON else Status.ERROR,
+                e.localizedMessage ?: "Root display OFF failed"
+            )
         }
     }
 
