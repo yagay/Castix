@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
@@ -42,7 +44,8 @@ internal class InputGuardHost(
                 if (enabled) onFallbackDoubleTap()
                 return true
             }
-        }
+        },
+        Handler(Looper.getMainLooper())
     )
 
     @SuppressLint("ClickableViewAccessibility")
