@@ -716,6 +716,19 @@ fun AmoledScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
+                    AmoledSwitchRow(
+                        icon = Icons.Default.Security,
+                        title = "30-second safety recovery test",
+                        description = "Automatically restore the physical display after 30 seconds. Keep enabled until Root wake events work on your phone.",
+                        checked = uiState.rootDisplaySafetyTestMode,
+                        onCheckedChange = { viewModel.setRootDisplaySafetyTestMode(it) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
                     // Double Tap to Wake (AMOLED overlay, or best-effort Root input listener).
                     AmoledSwitchRow(
                         icon = Icons.Default.TouchApp,
