@@ -51,6 +51,9 @@ object ScreenModeController {
                     if (BlackScreenOverlayManager.isBlackScreenActive.value) {
                         BlackScreenOverlayManager.getInstance(app).hideBlackScreen()
                     }
+                    // Keep the controller alive during the genuine system sleep
+                    // transition; the keyguard remains enforced by Android.
+                    CastixBackgroundService.start(app)
                     scope.launch {
                         val result = runCatching {
                             if (!root.checkPermission(app)) {
