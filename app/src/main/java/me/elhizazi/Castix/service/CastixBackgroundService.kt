@@ -85,8 +85,7 @@ class CastixBackgroundService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 Log.d(TAG, "Stopping CastixBackgroundService by user action")
-                RootDisplayManager.getInstance(this).restore()
-                stopSelf()
+                RootDisplayManager.getInstance(this).restore { stopSelf() }
                 return START_NOT_STICKY
             }
             ACTION_BLACK_SCREEN -> {
