@@ -472,7 +472,7 @@ fun LSPosedHookCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Experimental audio focus policy configured. Enable this app in LSPosed scope and restart it. This does not prevent onStop() or player.pause().",
+                            text = AppStrings.text("screen_hook_desc"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
