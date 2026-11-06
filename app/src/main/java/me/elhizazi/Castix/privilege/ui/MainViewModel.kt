@@ -17,6 +17,8 @@ import me.elhizazi.Castix.privilege.domain.model.FloatingButtonMode
 import me.elhizazi.Castix.privilege.domain.model.PlaybackOptimizationTask
 import me.elhizazi.Castix.privilege.domain.repository.PrivilegeEngineRepository
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
+import me.elhizazi.Castix.display.DisplayMode
+import me.elhizazi.Castix.display.ScreenModeController
 import me.elhizazi.Castix.display.RootDisplayManager
 import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.service.CastixBackgroundService
@@ -47,7 +49,7 @@ class MainViewModel(
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
             selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
             isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled(),
-            preferRootPhysicalDisplay = RootDisplayPreferences.preferRoot(application),
+            displayMode = RootDisplayPreferences.mode(application),
             rootDisplaySafetyTestMode = RootDisplayPreferences.safetyTestMode(application)
         )
     )
@@ -71,6 +73,7 @@ class MainViewModel(
         refreshPermissionsAndLockState()
         loadTargetApps()
         observeBlackScreenStatus()
+        observeScreenActionErrors()
     }
 
     private fun observeBlackScreenStatus() {
@@ -99,6 +102,16 @@ class MainViewModel(
                         notificationMessage = if (physical.status == RootDisplayManager.Status.ERROR)
                             physical.message else it.notificationMessage
                     )
+                }
+            }
+        }
+    }
+
+    private fun observeScreenActionErrors() {
+        viewModelScope.launch {
+            ScreenModeController.lastError.collect { message ->
+                if (!message.isNullOrBlank()) {
+                    _uiState.update { it.copy(notificationMessage = message) }
                 }
             }
         }
@@ -909,44 +922,38 @@ class MainViewModel(
 
     fun toggleBlackScreen() {
         val app = getApplication<Application>()
-        if (!FloatingOverlayManager.canDrawOverlays(app)) {
+        val mode = RootDisplayPreferences.mode(app)
+        if (mode != DisplayMode.SYSTEM_LOCK && !FloatingOverlayManager.canDrawOverlays(app)) {
             _uiState.update {
-                it.copy(notificationMessage = "Overlay permission is needed for the 1x1 keep-awake host.")
+                it.copy(notificationMessage = "Overlay permission is needed for screen-off input safety.")
             }
             return
         }
-
-        if (RootDisplayPreferences.preferRoot(app)) {
-            try {
-                // Keep a foreground service alive while the physical panel is off.
-                CastixBackgroundService.start(app)
-                RootDisplayManager.getInstance(app).toggle()
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(notificationMessage = "Cannot start root screen controller: ${e.localizedMessage}")
-                }
-            }
-        } else {
-            me.elhizazi.Castix.service.BlackScreenOverlayManager.getInstance(app).toggleBlackScreen()
-        }
+        ScreenModeController.activate(app)
     }
 
-    fun setPreferRootPhysicalDisplay(enabled: Boolean) {
+    fun setDisplayMode(mode: DisplayMode) {
         val app = getApplication<Application>()
-        if (RootDisplayManager.getInstance(app).state.value.isOff ||
+        val rootStatus = RootDisplayManager.getInstance(app).state.value.status
+        if (rootStatus != RootDisplayManager.Status.ON ||
             me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value) {
             _uiState.update {
                 it.copy(notificationMessage = "Restore the screen before switching display modes.")
             }
             return
         }
-        RootDisplayPreferences.setPreferRoot(app, enabled)
+        RootDisplayPreferences.setMode(app, mode)
         _uiState.update {
             it.copy(
-                preferRootPhysicalDisplay = enabled,
-                notificationMessage = if (enabled)
-                    "Root physical display power selected. Use power/volume-key recovery if touch events are absent."
-                else "AMOLED overlay mode selected (no physical panel power-off)."
+                displayMode = mode,
+                notificationMessage = when (mode) {
+                    DisplayMode.PHYSICAL_OFF ->
+                        "Physical panel-off is preferred: the app stays resumed; this is NOT a security lock."
+                    DisplayMode.SYSTEM_LOCK ->
+                        "Android will sleep and use the real ColorOS keyguard. Playback depends on each player."
+                    DisplayMode.AMOLED_OVERLAY ->
+                        "Manual AMOLED overlay selected; the physical panel remains powered."
+                }
             )
         }
     }
