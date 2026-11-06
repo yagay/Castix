@@ -50,6 +50,17 @@ rejected by vendor ROMs; no automatic success should be inferred.
 Shizuku's `newProcess` API is deprecated and may fail on newer Shizuku versions.
 The longer-term solution is a bound Shizuku `UserService` with explicit Binder IPC.
 
+## Screen-off background service
+
+- Castix is a screen/overlay controller, not the media player, so its foreground
+  service now declares `specialUse` rather than falsely claiming `mediaPlayback`.
+- A partial CPU WakeLock is requested only after real `ACTION_SCREEN_OFF` (or
+  when the service starts while the device is already non-interactive).
+- It is released on screen-on, user-present, or service teardown. A two-hour
+  maximum timeout guards against a permanently held lock after a missed event.
+- This CPU lock is not a replacement for the actual player's MediaSession,
+  foreground media playback service or app-specific lockscreen support.
+
 ## Manual validation
 
 - Turn on LSPosed for Castix and one test player; inspect module logs.
