@@ -64,89 +64,26 @@ class LSPatchEngine : IPrivilegeEngine {
         }
     }
 
-    override suspend fun executeCommand(command: String): ExecutionResult = withContext(Dispatchers.Default) {
-        val startTime = SystemClock.elapsedRealtime()
-        val trimmed = command.trim()
-
-        when {
-            trimmed.contains("patch_app", ignoreCase = true) -> {
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[LSPatch Rootless] Target application dex patched successfully.\nAudio focus interceptor embedded into application runtime.",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-            trimmed.contains("inject_audio_hook", ignoreCase = true) || trimmed.contains("toggle_hook", ignoreCase = true) -> {
-                isModulePatchedActive = !isModulePatchedActive
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[LSPatch Rootless] In-Process AudioFocus Hook: ${if (isModulePatchedActive) "ACTIVATED" else "DEACTIVATED"}",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-            trimmed.contains("status", ignoreCase = true) -> {
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[LSPatch Engine] Loader: Rootless Dex Loader v0.6+\nPatched Container: Active\nIn-Process Hooks: ${if (isModulePatchedActive) "1 Bound" else "Standby"}",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-            else -> {
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[LSPatch Direct Dispatch]: $command\nStatus: Hook payload dispatched to sandboxed ART loader.",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-        }
-    }
+    override suspend fun executeCommand(command: String): ExecutionResult = ExecutionResult(
+        command = command,
+        exitCode = 3,
+        stdout = "",
+        stderr = "No APK patcher or active runtime hook is installed by Castix.",
+        executionTimeMs = 0L,
+        engineUsed = EngineType.LSPATCH
+    )
 
     override suspend fun executePlaybackTask(
         task: PlaybackOptimizationTask,
         targetPackage: String
-    ): ExecutionResult = withContext(Dispatchers.Default) {
-        val startTime = SystemClock.elapsedRealtime()
-        val stdout = when (task) {
-            PlaybackOptimizationTask.BATTERY_WHITELIST ->
-                "[LSPatch] Injected PowerManager.isIgnoringBatteryOptimizations() true spoof into $targetPackage."
-            PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE ->
-                "[LSPatch] Intercepted UsageStatsManager.getAppStandbyBucket() -> STANDBY_BUCKET_ACTIVE."
-            PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK -> {
-                isModulePatchedActive = true
-                "[LSPatch] Hooked AudioManager.abandonAudioFocusRequest() to ignore loss transients."
-            }
-            PlaybackOptimizationTask.APP_OPS_BACKGROUND ->
-                "[LSPatch] In-process AppOps bypass injected for OP_RUN_IN_BACKGROUND."
-            PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE ->
-                "[LSPatch] Injected persistent foreground dummy binder thread in app process."
-        }
-
-        ExecutionResult(
-            engineUsed = engineType,
-            command = "lspatch::invoke_task --task=${task.name.lowercase()} --pkg=$targetPackage",
-            exitCode = 0,
-            stdout = stdout,
-            stderr = "",
-            isSuccess = true,
-            executionTimeMs = SystemClock.elapsedRealtime() - startTime
-        )
-    }
+    ): ExecutionResult = ExecutionResult(
+        command = "playback::${task.name} --pkg=$targetPackage",
+        exitCode = 3,
+        stdout = "",
+        stderr = "No APK patcher or active runtime hook is installed by Castix.",
+        executionTimeMs = 0L,
+        engineUsed = EngineType.LSPATCH
+    )
 
     override suspend fun getHealth(context: Context): ServiceHealth = withContext(Dispatchers.IO) {
         val available = isAvailable(context)
