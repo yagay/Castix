@@ -2,6 +2,7 @@ package me.elhizazi.Castix.display
 
 import android.content.Context
 import android.app.KeyguardManager
+import android.os.PowerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import me.elhizazi.Castix.privilege.domain.engine.RootEngine
 import me.elhizazi.Castix.service.BlackScreenOverlayManager
 import me.elhizazi.Castix.service.CastixBackgroundService
@@ -70,6 +72,13 @@ object ScreenModeController {
                             val command = root.executeCommand("input keyevent 223")
                             if (!command.isSuccess) {
                                 error(command.stderr.ifBlank { "System sleep key command failed" })
+                            }
+                            // A successful shell exit alone is not proof that
+                            // the vendor has put Android into the sleep state.
+                            delay(700L)
+                            val power = app.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                            if (power?.isInteractive == true) {
+                                error("ColorOS remained interactive after the sleep request.")
                             }
                         }
                         result.onFailure { failure ->
