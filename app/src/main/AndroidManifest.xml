@@ -70,6 +70,12 @@
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
 
+        <!-- Only reports whether the calling app has opted into the experimental audio hook. -->
+        <provider
+            android:name=".xposed.HookPolicyProvider"
+            android:authorities="${applicationId}.hook-policy"
+            android:exported="true" />
+
         <!-- Shizuku Client Provider (Essential for receiving Binder from Shizuku, Shizuku+, or Shevery) -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
