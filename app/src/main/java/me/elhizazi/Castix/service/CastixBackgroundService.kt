@@ -37,6 +37,7 @@ class CastixBackgroundService : Service() {
 
     companion object {
         private const val TAG = "CastixService"
+        private const val SCREEN_OFF_WAKELOCK_TIMEOUT_MS = 2L * 60L * 60L * 1000L
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "castix_playback_channel"
 
@@ -75,7 +76,7 @@ class CastixBackgroundService : Service() {
         overlayManager = FloatingOverlayManager(this)
         createNotificationChannel()
         registerScreenStateReceiver()
-        acquireWakeLock()
+        // Only hold the CPU awake during an actual screen-off session.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,6 +98,8 @@ class CastixBackgroundService : Service() {
             else -> {
                 // START or regular start
                 startForegroundNotification()
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (pm?.isInteractive == false) acquireWakeLock()
                 _isServiceRunning.value = true
                 refreshOverlayState()
                 return START_STICKY
@@ -122,11 +125,11 @@ class CastixBackgroundService : Service() {
 
     private fun startForegroundNotification() {
         val notification = buildPersistentNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -203,22 +206,21 @@ class CastixBackgroundService : Service() {
         }
     }
 
-    @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() {
         try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
             if (wakeLock == null) {
-                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-                wakeLock = powerManager?.newWakeLock(
+                wakeLock = pm.newWakeLock(
                     PowerManager.PARTIAL_WAKE_LOCK,
-                    "Castix::BackgroundPlaybackWakeLock"
-                )?.apply {
-                    setReferenceCounted(false)
-                    acquire()
-                }
-                Log.d(TAG, "Castix Partial WakeLock acquired for Lock Screen protection")
+                    "Castix::ScreenOffPlaybackWakeLock"
+                ).apply { setReferenceCounted(false) }
+            }
+            if (wakeLock?.isHeld != true) {
+                wakeLock?.acquire(SCREEN_OFF_WAKELOCK_TIMEOUT_MS)
+                Log.d(TAG, "Screen-off CPU WakeLock acquired with safety timeout")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to acquire WakeLock", e)
+            Log.e(TAG, "Failed to acquire screen-off WakeLock", e)
         }
     }
 
@@ -253,6 +255,7 @@ class CastixBackgroundService : Service() {
                         acquireWakeLock()
                     }
                     Intent.ACTION_SCREEN_ON -> {
+                        releaseWakeLock()
                         val isLocked = keyguardManager?.isKeyguardLocked == true
                         _isLockScreenActive.value = isLocked
                         if (BlackScreenOverlayManager.isBlackScreenActive.value) {
@@ -260,6 +263,7 @@ class CastixBackgroundService : Service() {
                         }
                     }
                     Intent.ACTION_USER_PRESENT -> {
+                        releaseWakeLock()
                         Log.d(TAG, "User unlocked device (USER_PRESENT)")
                         _isLockScreenActive.value = false
                     }

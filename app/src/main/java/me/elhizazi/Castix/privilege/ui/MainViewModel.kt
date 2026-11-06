@@ -43,20 +43,16 @@ class MainViewModel(
             selectedEngine = appSettingsManager.getSelectedEngine() ?: EngineType.SHIZUKU,
             isFloatingButtonEnabled = targetAppsRepo.isFloatingButtonEnabled(),
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
-            selectedTargetPackages = targetAppsRepo.getSelectedPackages()
+            selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
+            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled()
         )
     )
     val uiState: StateFlow<PrivilegeUiState> = _uiState.asStateFlow()
 
     init {
-        // Load persisted playback optimization tasks & system state
-        val persistedTasks = appSettingsManager.getEnforcedPlaybackTasks().toMutableSet()
-        val powerManager = application.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        if (powerManager?.isIgnoringBatteryOptimizations(application.packageName) == true) {
-            persistedTasks.add(PlaybackOptimizationTask.BATTERY_WHITELIST)
-            appSettingsManager.setTaskEnforced(PlaybackOptimizationTask.BATTERY_WHITELIST, true)
-        }
-        _uiState.update { it.copy(activePlaybackTasks = persistedTasks) }
+        // Persisted command history is not proof that a device policy is still applied.
+        // Start unverified; only show command results from this live session.
+        _uiState.update { it.copy(activePlaybackTasks = emptySet()) }
 
         // Automatically check availability of all engines upon launch
         refreshEngineStatus()
@@ -285,7 +281,7 @@ class MainViewModel(
             currentSet.add(packageName)
         }
         targetAppsRepo.saveSelectedPackages(currentSet)
-        _uiState.update { it.copy(selectedTargetPackages = currentSet) }
+        _uiState.update { it.copy(selectedTargetPackages = currentSet, activePlaybackTasks = emptySet()) }
         FloatingOverlayManager.refreshCurrentVisibility()
         loadTargetApps()
     }
@@ -764,68 +760,105 @@ class MainViewModel(
     /**
      * Dispatches a specific Android 17 background playback optimization task.
      */
-    fun executePlaybackTask(task: PlaybackOptimizationTask) {
-        val activeEngine = _uiState.value.selectedEngine
-        val targetPkg = getApplication<Application>().packageName
+    /**
+     * Run against the actual chosen packages, never the Castix package.
+     * A command's exit code is logged faithfully; it is not interpreted as
+     * proof that a video player will survive Activity.onStop.
+     */
+    private suspend fun runPlaybackTaskForSelectedApps(task: PlaybackOptimizationTask) {
+        val type = _uiState.value.selectedEngine
+        val targets = _uiState.value.selectedTargetPackages.toList().sorted()
+        if (targets.isEmpty()) {
+            _uiState.update {
+                it.copy(notificationMessage = "Select at least one target application first.")
+            }
+            return
+        }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isExecuting = true) }
-
-            val result = repository.executePlaybackTask(activeEngine, task, targetPkg)
-
-            val entry = ConsoleEntry(
-                engine = result.engineUsed,
-                command = result.command,
-                exitCode = result.exitCode,
-                output = "[${task.title}] -> ${result.stdout.ifEmpty { "Executed successfully via ${activeEngine.displayName}" }}",
-                isError = !result.isSuccess,
-                durationMs = result.executionTimeMs
-            )
-            appendConsoleLog(entry)
-
-            _uiState.update { current ->
-                val updatedTasks = current.activePlaybackTasks.toMutableSet()
-                if (result.isSuccess) {
-                    updatedTasks.add(task)
-                    appSettingsManager.setTaskEnforced(task, true)
-                }
-                current.copy(
-                    isExecuting = false,
-                    activePlaybackTasks = updatedTasks,
-                    notificationMessage = "Executed ${task.title}"
+        var successful = 0
+        for (pkg in targets) {
+            val result = try {
+                repository.executePlaybackTask(type, task, pkg)
+            } catch (e: Exception) {
+                me.elhizazi.Castix.privilege.domain.model.ExecutionResult(
+                    command = "playback::${task.name} --pkg=$pkg",
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = e.localizedMessage ?: "Unexpected backend failure",
+                    executionTimeMs = 0L,
+                    engineUsed = type
                 )
             }
+            if (result.isSuccess) successful++
+            appendConsoleLog(
+                ConsoleEntry(
+                    engine = result.engineUsed,
+                    command = result.command,
+                    exitCode = result.exitCode,
+                    output = "[${task.title}] [$pkg] " +
+                        if (result.isSuccess) {
+                            result.stdout.ifBlank { "Command completed (not a playback guarantee)." }
+                        } else {
+                            result.stderr.ifBlank { "Backend reported failure" }
+                        },
+                    isError = !result.isSuccess,
+                    durationMs = result.executionTimeMs
+                )
+            )
+        }
+        _uiState.update { current ->
+            val updated = current.activePlaybackTasks.toMutableSet()
+            // A failed or unsupported command must not be persisted as enabled.
+            if (successful == targets.size) updated.add(task) else updated.remove(task)
+            current.copy(
+                activePlaybackTasks = updated,
+                notificationMessage = "${task.title}: $successful/${targets.size} commands completed"
+            )
         }
     }
 
-    /**
-     * Executes all background playback bypasses in sequence.
-     */
-    fun executeAllPlaybackBypasses() {
+    fun executePlaybackTask(task: PlaybackOptimizationTask) {
         viewModelScope.launch {
-            PlaybackOptimizationTask.entries.forEach { task ->
-                executePlaybackTask(task)
+            _uiState.update { it.copy(isExecuting = true) }
+            try {
+                runPlaybackTaskForSelectedApps(task)
+            } finally {
+                _uiState.update { it.copy(isExecuting = false) }
             }
         }
     }
 
-    /**
-     * Toggle LSPosed supplementary hook state (allows live interactive simulation of Zygote hook).
-     */
+    fun executeAllPlaybackBypasses() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExecuting = true) }
+            try {
+                // Sequential execution avoids racing over shared system settings.
+                for (task in PlaybackOptimizationTask.entries) {
+                    runPlaybackTaskForSelectedApps(task)
+                }
+            } finally {
+                _uiState.update { it.copy(isExecuting = false) }
+            }
+        }
+    }
+
     fun toggleLSPosedModule(active: Boolean) {
-        appSettingsManager.setTaskEnforced(PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK, active)
-        refreshEngineStatus()
+        targetAppsRepo.setAudioFocusGuardEnabled(active)
+        _uiState.update {
+            it.copy(
+                isAudioFocusGuardEnabled = active,
+                notificationMessage = if (active)
+                    "Audio focus guard opted in. Select target apps, enable their LSPosed scope and restart them."
+                else "Audio focus guard disabled (restart scoped apps to remove hooks)."
+            )
+        }
         appendConsoleLog(
             ConsoleEntry(
                 engine = EngineType.LSPOSED,
-                command = "lsposed::toggle_hook --active=$active",
+                command = "lsposed::set_audio_focus_policy --enabled=$active",
                 exitCode = 0,
-                output = if (active) {
-                    "LSPosed Hooking Activated: AudioFocus interception and phantom process killer hook bound in ART Zygote space."
-                } else {
-                    "LSPosed Hooking Deactivated."
-                },
-                durationMs = 8
+                output = "Saved local hook policy only. This does not confirm the hook is installed in any target process.",
+                durationMs = 0L
             )
         )
     }

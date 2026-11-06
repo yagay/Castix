@@ -42,78 +42,26 @@ class AccessibilityEngine : IPrivilegeEngine {
     }
 
     override suspend fun executeCommand(command: String): ExecutionResult = withContext(Dispatchers.Default) {
-        val startTime = SystemClock.elapsedRealtime()
-        val trimmed = command.trim()
-
-        when {
-            trimmed.contains("foreground", ignoreCase = true) || trimmed.contains("detect", ignoreCase = true) -> {
-                val currentPkg = CastixAccessibilityService.currentForegroundPackage.value ?: "Unknown / Home Screen"
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[Accessibility Engine] Current Foreground App: $currentPkg\nEvent Latency: < 5ms (Event-Driven, Zero Battery Drain)",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-            trimmed.contains("keep_alive", ignoreCase = true) || trimmed.contains("status", ignoreCase = true) -> {
-                val isConnected = CastixAccessibilityService.isServiceConnected.value
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[Accessibility Engine] Bound: $isConnected\nSystem Priority: BIND_ACCESSIBILITY_SERVICE (Elevated Priority)\nImmunity to background task killer: Active",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
-            else -> {
-                ExecutionResult(
-                    engineUsed = engineType,
-                    command = command,
-                    exitCode = 0,
-                    stdout = "[Accessibility Dispatch]: $command\nStatus: Processed via Android Accessibility Event Dispatcher.",
-                    stderr = "",
-                    isSuccess = true,
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime
-                )
-            }
+        val foregroundQuery = command.contains("foreground", ignoreCase = true) ||
+            command.contains("detect", ignoreCase = true)
+        if (foregroundQuery && CastixAccessibilityService.isServiceConnected.value) {
+            val current = CastixAccessibilityService.currentForegroundPackage.value ?: "Unknown"
+            ExecutionResult(command, 0, current, "", 0L, EngineType.ACCESSIBILITY)
+        } else {
+            ExecutionResult(command, 3, "",
+                "Unsupported: Accessibility only reports window events; it cannot execute privileged commands.",
+                0L, EngineType.ACCESSIBILITY)
         }
     }
 
     override suspend fun executePlaybackTask(
         task: PlaybackOptimizationTask,
         targetPackage: String
-    ): ExecutionResult = withContext(Dispatchers.Default) {
-        val startTime = SystemClock.elapsedRealtime()
-        val isConnected = CastixAccessibilityService.isServiceConnected.value
-
-        val stdout = when (task) {
-            PlaybackOptimizationTask.BATTERY_WHITELIST ->
-                "[Accessibility Service] Elevated process binding protects $targetPackage and Castix from aggressive system kill."
-            PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE ->
-                "[Accessibility Service] Window state events keep active media player process in foreground execution state."
-            PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK ->
-                "[Accessibility Service] Accessibility focus ensures audio notifications and streams are prioritized."
-            PlaybackOptimizationTask.APP_OPS_BACKGROUND ->
-                "[Accessibility Service] Continuous window events keep background app components active."
-            PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE ->
-                "[Accessibility Service] Accessibility connection prevents Android Cached App Freezer from freezing the service."
-        }
-
-        ExecutionResult(
-            engineUsed = engineType,
-            command = "accessibility::apply_task --task=${task.name.lowercase()} --pkg=$targetPackage",
-            exitCode = if (isConnected) 0 else 1,
-            stdout = if (isConnected) stdout else "[Accessibility Service] Service not yet enabled in Android Settings. Please grant permission.",
-            stderr = if (isConnected) "" else "Service inactive",
-            isSuccess = isConnected,
-            executionTimeMs = SystemClock.elapsedRealtime() - startTime
-        )
-    }
+    ): ExecutionResult = ExecutionResult(
+        "playback::${task.name}", 3, "",
+        "Unsupported: Accessibility cannot change the playback policy of $targetPackage.",
+        0L, EngineType.ACCESSIBILITY
+    )
 
     override suspend fun getHealth(context: Context): ServiceHealth = withContext(Dispatchers.IO) {
         val isEnabled = CastixAccessibilityService.isAccessibilityEnabled(context)

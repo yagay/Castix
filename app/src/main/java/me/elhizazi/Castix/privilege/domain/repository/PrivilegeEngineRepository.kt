@@ -21,10 +21,10 @@ import java.io.File
  * System diagnostic information for Android 17 runtime.
  */
 data class SystemDeviceInfo(
-    val androidVersion: String = "17 (Preview / API 36)",
+    val androidVersion: String = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
     val apiLevel: Int = Build.VERSION.SDK_INT,
     val deviceModel: String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
-    val selinuxMode: String = "Enforcing",
+    val selinuxMode: String = "Unknown",
     val architecture: String = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
 )
 
@@ -112,14 +112,14 @@ class PrivilegeEngineRepository(
                 val content = file.readText().trim()
                 if (content == "1") "Enforcing" else "Permissive"
             } else {
-                "Enforcing (Android 17)"
+                "Unknown"
             }
         } catch (_: Exception) {
             "Enforcing"
         }
 
         return SystemDeviceInfo(
-            androidVersion = if (Build.VERSION.SDK_INT >= 36) "17 (API 36)" else "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+            androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             apiLevel = Build.VERSION.SDK_INT,
             deviceModel = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
             selinuxMode = selinux,
