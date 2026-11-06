@@ -1,57 +1,81 @@
-# Root physical display power (Extinguish integration)
+# Castix screen modes: Extinguish, system lock and AMOLED fallback
 
-Status: **experimental; not yet verified on ColorOS or OnePlus 15**.
+Status: **experimental**. None of the Root display, ColorOS wake gesture, or
+locked-player compatibility paths has yet been validated on a real OnePlus 15.
+The repository's Debug build and unit tests must pass before merging.
 
-This implementation ports the physical display-power technique from
+## Why there are three mutually exclusive modes
+
+| Mode | Real physical panel power | Android locked? | Expected playback behavior |
+|---|---|---|---|
+| `PHYSICAL_OFF` (default) | OFF via Root + Extinguish | **No** | Current player normally stays resumed |
+| `SYSTEM_LOCK` | Controlled by Android/ColorOS sleep | **Normal secure keyguard** | Depends on the player; LSPosed audio guard may help |
+| `AMOLED_OVERLAY` | ON with black overlay | No | Old manual fallback, no automatic fallback on Root errors |
+
+**Physical panel-off is not a privacy or password lock.** The app stays active,
+and notification/security policies do not automatically change. This is the
+recommended mode for users prioritizing uninterrupted video playback.
+
+**Normal system lock never lies to third-party apps about their lock state.**
+The Root `input keyevent 223` command requests genuine Android `KEYCODE_SLEEP`.
+Android applies lockscreen credentials and lock delay according to device settings;
+configure a secure screen lock and immediate lock-after-sleep if this is important.
+LSPosed audio hooks are separately scoped and opt-in. A player that pauses in
+`onStop()`, destroys its Surface or calls `pause()` may still stop.
+
+## Upstream attribution and code boundaries
+
+The physical display-power approach is derived from
 [Moderpach/Extinguish](https://github.com/Moderpach/Extinguish)
-(and the user's fork [yagay/Extinguish](https://github.com/yagay/Extinguish))
-into a **separate Root back end** in Castix. Upstream Extinguish is GPL-3.0
-and Castix is GPL-3.0-or-later. Retain this credit when merging source.
+and the user's fork [yagay/Extinguish](https://github.com/yagay/Extinguish),
+licensed GPL-3.0. Keep that attribution when merging. This code is isolated
+under `app/src/main/java/me/elhizazi/Castix/display` to permit future upstream
+updates without importing the full Extinguish UI or Shizuku services.
 
-## What this changes
+- `RootDisplayCli.java`: a privileged `su` / `app_process` helper calls
+  `SurfaceControl.setDisplayPowerMode(token, 0 / 2)`; Android 14+ token path
+  follows Extinguish's `DisplayControl` services.jar code.
+- `RootDisplayManager.kt`: CPU awake host, bounded partial WakeLock, Root
+  getevent wake monitor, Root recovery timer, display-state lifecycle.
+- `InputGuardHost.kt`: transparent, full-screen input-consuming overlay only
+  during Root physical panel-off. **It is not a black-image or brightness
+  approximation.** It prevents taps reaching the application content where
+  Android allows this overlay. OS gesture navigation and sensitive system
+  surfaces may still handle touches.
+- `RootDisplayPreferences.kt`: selected mode, migration from prior Root
+  boolean, and safety-test setting.
+- `ScreenModeController.kt`: one mode dispatcher for UI button, notification
+  action, floating button and Quick Settings tile; system lock uses Android's
+  own keyguard and sleep state, not fake PowerManager/KeyguardManager responses.
 
-- `RootDisplayCli.java`: privileged `app_process` process started through `su`.
-  Calls hidden `SurfaceControl.setDisplayPowerMode(token, 0/2)`.
-  Android 14+ display token follows Extinguish's `DisplayControl` services.jar route.
-- `RootDisplayManager.kt`: lifecycle, UID-0 permission check, 1x1 KEEP_SCREEN_ON
-  view (not a black screen), root `getevent` watcher, safety timeouts and recovery.
-- `RootDisplayPreferences.kt`: choose Root physical display or existing AMOLED
-  overlay. Root mode is preferred by default; overlay must be chosen explicitly.
-- The quick tile, notification, floating trigger and main black-screen action
-  all use the selected display mode.
-- LSPosed audio guard remains separate and opt-in. Physical panel-off does
-  not require disabling normal Activity lifecycle callbacks.
+**Why not grab all Linux touch devices?** An evdev `EVIOCGRAB` can suppress
+vendor-native gestures and system navigation, and a crash may leave input
+blocked. The Root getevent watcher is *read-only*. A temporary transparent
+Android input layer is used solely as a safety boundary around the foreground
+application, while the actual display power remains Root controlled.
 
-## Safety and use
+## Recovery: leave the 30-second test enabled
 
-**Start with the default 30-second safety test enabled.**
-The root bridge is experimental, and a vendor implementation may reject
-the hidden APIs or fail to emit touch events while the panel is off.
+1. Grant Root through your manager, then allow Castix's overlay permission.
+2. Select `PHYSICAL_OFF`. Keep **30-second safety recovery test** enabled.
+3. Open a target video player, then activate the Castix screen action.
+4. Try the device's native double-tap gesture first, if it emits a wake event.
+   A touch double-tap inside the guard and double volume-up are fallbacks.
+5. If no input is delivered while the panel is OFF, the detached Root watchdog
+   should attempt restoration after 30 seconds. The app also has an independent
+   timer to request restoration.
+6. Only after successful device tests turn off the 30-second test. A two-hour
+   Root watchdog still limits the duration of an unresponsive display session.
 
-1. Grant Castix Root from KernelSU / Magisk / APatch.
-2. Grant overlay permission; the 1x1 keep-awake host needs it.
-3. Select **Real screen power-off (Root / Extinguish)** in AMOLED settings.
-4. Leave **30-second safety recovery test** enabled and start a video.
-5. Turn the screen off using the Castix floating trigger or main action.
-6. Try system double-tap (if events exist), **double volume up**, or power
-   button; the display should be restored automatically within 30 seconds.
-7. Only after several successful tests disable test mode. A detached root
-   watchdog will still attempt to restore after two hours.
+Native ColorOS DT2W may require real Android sleep; it is **not guaranteed**
+to function when Android is still interactive and only the display power mode
+is OFF. A software input listener cannot manufacture a missing touch IRQ.
 
-**Important:** The code cannot force the ColorOS touch controller to produce
-touch events when the panel is physically off. The hardware's native double-tap
-wake may only be enabled in the *real* Android sleep state. In that case
-physical off + keep-running apps and native DT2W cannot both be guaranteed.
+If an attempt to enter display-off fails, the code tries Root restore, reports
+the failure, and removes the invisible input guard so a visibly powered display
+does not become untouchable. If Root restore itself fails, the watchdog remains.
 
-Do not rely on these paths for alarm, emergency, accessibility or security
-workflows until tested on the actual ROM. The root evdev listener is a
-best-effort fallback, not a guarantee. The app does not bypass or unlock the
-Android keyguard.
-
-### Emergency restoration from an ADB/root terminal
-
-If the display remains physically off, connect with adb or use a previously
-available root terminal. Run these commands **inside an interactive shell**:
+### Emergency root/ADB display restore
 
 ```sh
 su
@@ -59,48 +83,23 @@ APK="$(pm path me.elhizazi.Castix | head -n 1 | sed 's/^package://')"
 CLASSPATH="$APK" /system/bin/app_process /system/bin me.elhizazi.Castix.display.RootDisplayCli on
 ```
 
-If the display bridge reports an error, restarting the phone may be necessary.
-The watchdog file is under `/data/local/tmp/castix_display_<app_uid>.session`;
-its background timer restores the screen only if the same session marker remains.
+If this hidden API fails on the current ColorOS build, a reboot may be
+necessary. Before testing, ensure you have a reliable ADB or hardware recovery
+route and that the device is not needed for an emergency task.
 
-## Architecture boundaries
+## Build and verification
 
-```text
-Castix UI / mode selection
-    |         |
-    |         +-- optional AMOLED black overlay (manual fallback)
-    |
-    +-- CastixBackgroundService (keeps session alive)
-            |
-            +-- RootDisplayManager
-                    |-- tiny KEEP_SCREEN_ON host
-                    |-- root getevent input reader (double tap / keys)
-                    |-- out-of-process recovery watchdog
-                    |
-                    +-- su -c CLASSPATH=<Castix APK> app_process ... RootDisplayCli
-                            |
-                            +-- Extinguish SurfaceControl/DisplayControl method
+The debug-only feature-branch workflow runs:
+
+```sh
+./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon
 ```
 
-The new display code is intentionally isolated in `me.elhizazi.Castix.display`
-so a future Extinguish source update only requires reviewing the bridge rather
-than merging all of Extinguish's UI, Shizuku IPC and settings into Castix.
+Before merging, test all of the following on-device: video stays playing with
+the physical panel off; taps do not activate the underlying video player;
+recovery via both native gestures and fallback hardware keys; timer restoration;
+process death and failed Root permission; normal lock showing the real keyguard;
+AMOLED manual fallback; and changing modes only when the screen is restored.
 
-## Remaining compatibility work
-
-- Runtime test that the `services.jar` classloader and `android_servers`
-  JNI loading remain accessible on ColorOS/OxygenOS 16.
-- Confirm physical display token mapping and multi-display behavior.
-- Confirm root `getevent -l` reports `KEY_WAKEUP` or `BTN_TOUCH` when
-  `POWER_MODE_OFF` is active. If not, inspect OPlus native gesture HAL and
-  kernel; never assume LSPosed can manufacture unavailable touch IRQs.
-- Confirm user app truly stays resumed and is not paused by the player itself.
-- The session also holds a bounded PARTIAL_WAKE_LOCK so a sleeping CPU cannot
-  unnecessarily suspend the root input watcher while Android still considers
-  the display interactive.
-- Touch input may still reach the underlying application when the panel is off;
-  do not assume the read-only evdev watcher consumes touches.
-- The detached watchdog is intended as a last resort; verify that it survives
-  Android process death on the target ROM.
-- Verify Debug compilation and tests before merging. No APK has been verified
-  merely by pushing these commits.
+**GitHub source commits and a mergeable PR are not proof of APK build or
+device compatibility.**
