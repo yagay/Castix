@@ -194,7 +194,7 @@ class CastixBackgroundService : Service() {
             )
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Stop / إيقاف",
+                AppStrings.getForContext(this, "service_btn_stop"),
                 stopPendingIntent
             )
             .build()
