@@ -17,6 +17,8 @@ import me.elhizazi.Castix.privilege.domain.model.FloatingButtonMode
 import me.elhizazi.Castix.privilege.domain.model.PlaybackOptimizationTask
 import me.elhizazi.Castix.privilege.domain.repository.PrivilegeEngineRepository
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.service.CastixBackgroundService
 import me.elhizazi.Castix.service.FloatingOverlayManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +46,8 @@ class MainViewModel(
             isFloatingButtonEnabled = targetAppsRepo.isFloatingButtonEnabled(),
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
             selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
-            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled()
+            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled(),
+            preferRootPhysicalDisplay = RootDisplayPreferences.preferRoot(application)
         )
     )
     val uiState: StateFlow<PrivilegeUiState> = _uiState.asStateFlow()
@@ -78,9 +81,24 @@ class MainViewModel(
                 blackScreenZeroBrightness = manager.zeroBrightness
             )
         }
+        val rootManager = RootDisplayManager.getInstance(getApplication())
         viewModelScope.launch {
             me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.collect { active ->
-                _uiState.update { it.copy(isBlackScreenActive = active) }
+                _uiState.update {
+                    it.copy(isBlackScreenActive = active || rootManager.state.value.isOff)
+                }
+            }
+        }
+        viewModelScope.launch {
+            rootManager.state.collect { physical ->
+                _uiState.update {
+                    it.copy(
+                        isBlackScreenActive = physical.isOff ||
+                            me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value,
+                        notificationMessage = if (physical.status == RootDisplayManager.Status.ERROR)
+                            physical.message else it.notificationMessage
+                    )
+                }
             }
         }
     }
@@ -232,9 +250,9 @@ class MainViewModel(
             appendConsoleLog(
                 ConsoleEntry(
                     engine = _uiState.value.selectedEngine,
-                    command = "service::start --foreground --type=mediaPlayback --wakeLock=PARTIAL",
+                    command = "service::start --foreground --type=specialUse --wakeLock=screenOffOnly",
                     exitCode = 0,
-                    output = "Castix Background Service started.\nStatus Bar Notification: ACTIVE (VISIBILITY_PUBLIC)\nCPU WakeLock: ENGAGED for Lock Screen bypass.",
+                    output = "Castix Background Service started.\nStatus Bar Notification: ACTIVE (VISIBILITY_PUBLIC)\nCPU WakeLock: only when the device is genuinely non-interactive.",
                     durationMs = 12
                 )
             )
@@ -890,15 +908,45 @@ class MainViewModel(
 
     fun toggleBlackScreen() {
         val app = getApplication<Application>()
-        val hasOverlay = FloatingOverlayManager.canDrawOverlays(app)
-        if (!hasOverlay) {
+        if (!FloatingOverlayManager.canDrawOverlays(app)) {
             _uiState.update {
-                it.copy(notificationMessage = "يرجى منح إذن الظهور فوق التطبيقات أولاً لتشغيل الشاشة السوداء")
+                it.copy(notificationMessage = "Overlay permission is needed for the 1x1 keep-awake host.")
             }
             return
         }
-        val manager = me.elhizazi.Castix.service.BlackScreenOverlayManager.getInstance(app)
-        manager.toggleBlackScreen()
+
+        if (RootDisplayPreferences.preferRoot(app)) {
+            try {
+                // Keep a foreground service alive while the physical panel is off.
+                CastixBackgroundService.start(app)
+                RootDisplayManager.getInstance(app).toggle()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(notificationMessage = "Cannot start root screen controller: ${e.localizedMessage}")
+                }
+            }
+        } else {
+            me.elhizazi.Castix.service.BlackScreenOverlayManager.getInstance(app).toggleBlackScreen()
+        }
+    }
+
+    fun setPreferRootPhysicalDisplay(enabled: Boolean) {
+        val app = getApplication<Application>()
+        if (RootDisplayManager.getInstance(app).state.value.isOff) {
+            _uiState.update {
+                it.copy(notificationMessage = "Restore the physical display before switching modes.")
+            }
+            return
+        }
+        RootDisplayPreferences.setPreferRoot(app, enabled)
+        _uiState.update {
+            it.copy(
+                preferRootPhysicalDisplay = enabled,
+                notificationMessage = if (enabled)
+                    "Root physical display power selected. Use power/volume-key recovery if touch events are absent."
+                else "AMOLED overlay mode selected (no physical panel power-off)."
+            )
+        }
     }
 
     fun updateBlackScreenSettings(doubleTap: Boolean, showClock: Boolean, zeroBrightness: Boolean) {
