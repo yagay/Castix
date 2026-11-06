@@ -171,8 +171,8 @@ class ShizukuEngine : IPrivilegeEngine {
         }
         var process: Process? = null
         try {
-            process = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
-            val current = process
+            val current = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+                .also { process = it }
             val stdout = java.io.ByteArrayOutputStream()
             val stderr = java.io.ByteArrayOutputStream()
             val outReader = Thread({
