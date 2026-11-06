@@ -1,6 +1,7 @@
 package me.elhizazi.Castix.display
 
 import android.content.Context
+import android.app.KeyguardManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +45,11 @@ object ScreenModeController {
                 }
                 DisplayMode.SYSTEM_LOCK -> {
                     // Android lock, not a fake "unlocked" state in the player.
+                    val keyguard = app.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                    if (keyguard?.isDeviceSecure != true) {
+                        _lastError.value = "Configure a PIN/password/pattern before using the secure lock mode."
+                        return
+                    }
                     if (RootDisplayManager.getInstance(app).state.value.isOff) {
                         _lastError.value = "Restore the physical panel before system locking."
                         return
