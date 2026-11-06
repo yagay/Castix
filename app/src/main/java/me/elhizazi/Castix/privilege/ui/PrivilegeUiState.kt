@@ -46,6 +46,7 @@ data class PrivilegeUiState(
     val isBatteryOptimizationIgnored: Boolean = false,
     // Black Screen & App Navigation State
     val isBlackScreenActive: Boolean = false,
+    val preferRootPhysicalDisplay: Boolean = true,
     val blackScreenDoubleTap: Boolean = true,
     val blackScreenShowClock: Boolean = true,
     val blackScreenZeroBrightness: Boolean = true,
