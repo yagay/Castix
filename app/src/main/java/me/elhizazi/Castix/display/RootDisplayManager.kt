@@ -119,7 +119,9 @@ class RootDisplayManager private constructor(private val context: Context) {
                 throw IllegalStateException("Root recovery watchdog could not be installed")
             }
             sessionMarker = marker
-            startInputWatcher()
+            if (!startInputWatcher()) {
+                throw IllegalStateException("Root input watcher unavailable; physical display remains ON")
+            }
 
             val result = root.executeCommand(displayCommand("off"))
             if (!result.isSuccess || !result.stdout.contains("CASTIX_DISPLAY_OFF_OK")) {
@@ -228,16 +230,24 @@ class RootDisplayManager private constructor(private val context: Context) {
         runCatching { wm.removeView(keepAwakeView) }
     }
 
-    private fun startInputWatcher() {
-        if (!monitoring.compareAndSet(false, true)) return
+    private suspend fun startInputWatcher(): Boolean {
+        if (monitoring.get()) return monitorProcess?.isAlive == true
+        if (!root.executeCommand("command -v getevent").isSuccess) return false
+        if (!monitoring.compareAndSet(false, true)) return false
+
+        val ready = kotlinx.coroutines.CompletableDeferred<Boolean>()
         Thread({
             var lastTouchUp = 0L
             var lastVolumeUp = 0L
             try {
-                // Root is required to listen to /dev/input. This is read-only.
-                val proc = ProcessBuilder("su", "-c", "exec getevent -l")
+                val proc = ProcessBuilder("su", "-c", "exec /system/bin/getevent -l")
                     .redirectErrorStream(true).start()
                 monitorProcess = proc
+                Thread.sleep(120)
+                val alive = proc.isAlive
+                ready.complete(alive)
+                if (!alive) return@Thread
+
                 BufferedReader(InputStreamReader(proc.inputStream)).use { reader ->
                     while (monitoring.get()) {
                         val line = reader.readLine() ?: break
@@ -270,7 +280,9 @@ class RootDisplayManager private constructor(private val context: Context) {
                 }
             } catch (t: Exception) {
                 Log.w(TAG, "Root evdev wake monitor unavailable: ${t.localizedMessage}")
+                if (!ready.isCompleted) ready.complete(false)
             } finally {
+                if (!ready.isCompleted) ready.complete(false)
                 monitoring.set(false)
                 monitorProcess?.destroy()
                 monitorProcess = null
@@ -279,6 +291,7 @@ class RootDisplayManager private constructor(private val context: Context) {
             isDaemon = true
             start()
         }
+        return kotlinx.coroutines.withTimeoutOrNull(3000L) { ready.await() } == true
     }
 
     private fun stopInputWatcher() {
