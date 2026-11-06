@@ -71,6 +71,8 @@ object AppStrings {
     }
 
     val en = mapOf(
+        "screen_root_watchdog_failed" to "Cannot install the Root display recovery timer.",
+        "screen_root_watcher_failed" to "Root input watcher unavailable; physical display was not turned off.",
         "settings_saved" to "Settings saved.",
         "screen_msg_tasks_complete" to " commands completed",
         "screen_msg_command_success" to "Command completed; this does not guarantee continued playback.",
