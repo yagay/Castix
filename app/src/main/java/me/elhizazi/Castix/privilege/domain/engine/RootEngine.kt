@@ -149,53 +149,55 @@ class RootEngine : IPrivilegeEngine {
         }
     }
 
+    /**
+     * Root command execution must not silently fall back to the application's unprivileged
+     * shell: callers need to know whether a privileged change really took effect.
+     */
     override suspend fun executeCommand(command: String): ExecutionResult = withContext(Dispatchers.IO) {
-        val startTime = SystemClock.elapsedRealtime()
-        val sanitizedCmd = command.trim()
-
+        val started = SystemClock.elapsedRealtime()
+        val cmd = command.trim()
+        if (cmd.isBlank()) {
+            return@withContext ExecutionResult(cmd, 2, "", "Empty command", 0L, EngineType.ROOT)
+        }
+        var process: Process? = null
         try {
-            // Execute via su shell daemon
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", sanitizedCmd))
-            val stdout = process.inputStream.bufferedReader().use { it.readText() }
-            val stderr = process.errorStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-            val duration = SystemClock.elapsedRealtime() - startTime
-
+            process = ProcessBuilder("su", "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
+            val current = process
+            val output = java.io.ByteArrayOutputStream()
+            val readerThread = Thread({
+                try {
+                    current.inputStream.use { input -> input.copyTo(output) }
+                } catch (_: Exception) {
+                    // The process may have been terminated after the timeout.
+                }
+            }, "Castix-root-output").apply {
+                isDaemon = true
+                start()
+            }
+            val completed = current.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)
+            if (!completed) current.destroyForcibly()
+            readerThread.join(1500)
+            val exit = if (completed) current.exitValue() else -1
             ExecutionResult(
-                command = sanitizedCmd,
-                exitCode = exitCode,
-                stdout = stdout.trim().ifEmpty { "[UID 0 Superuser command completed]" },
-                stderr = stderr.trim(),
-                executionTimeMs = duration,
+                command = cmd,
+                exitCode = exit,
+                stdout = output.toString("UTF-8").trim(),
+                stderr = if (completed) "" else "Root command timed out after 20 seconds",
+                executionTimeMs = SystemClock.elapsedRealtime() - started,
                 engineUsed = EngineType.ROOT
             )
         } catch (e: Exception) {
-            // In non-rooted or simulated environments, fallback gracefully to shell
-            val duration = SystemClock.elapsedRealtime() - startTime
-            try {
-                val fallbackProcess = Runtime.getRuntime().exec(arrayOf("sh", "-c", sanitizedCmd))
-                val stdout = fallbackProcess.inputStream.bufferedReader().use { it.readText() }
-                val stderr = fallbackProcess.errorStream.bufferedReader().use { it.readText() }
-                val exit = fallbackProcess.waitFor()
-
-                ExecutionResult(
-                    command = sanitizedCmd,
-                    exitCode = exit,
-                    stdout = if (stdout.isNotBlank()) stdout.trim() else "[Executed in standard sandbox shell]",
-                    stderr = if (stderr.isNotBlank()) stderr.trim() else "Notice: su daemon not responding; dispatched via standard shell.",
-                    executionTimeMs = SystemClock.elapsedRealtime() - startTime,
-                    engineUsed = EngineType.ROOT
-                )
-            } catch (fallbackEx: Exception) {
-                ExecutionResult(
-                    command = sanitizedCmd,
-                    exitCode = -1,
-                    stdout = "",
-                    stderr = "Root (su) execution error: ${e.localizedMessage}",
-                    executionTimeMs = duration,
-                    engineUsed = EngineType.ROOT
-                )
-            }
+            process?.destroyForcibly()
+            ExecutionResult(
+                command = cmd,
+                exitCode = -1,
+                stdout = "",
+                stderr = "Root command failed: ${e.localizedMessage}",
+                executionTimeMs = SystemClock.elapsedRealtime() - started,
+                engineUsed = EngineType.ROOT
+            )
         }
     }
 
@@ -203,17 +205,27 @@ class RootEngine : IPrivilegeEngine {
         task: PlaybackOptimizationTask,
         targetPackage: String
     ): ExecutionResult {
+        if (!targetPackage.matches(Regex("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+"))) {
+            return ExecutionResult("", 2, "", "Invalid target package", 0L, EngineType.ROOT)
+        }
         val rootCmd = when (task) {
             PlaybackOptimizationTask.BATTERY_WHITELIST ->
-                "dumpsys deviceidle whitelist +$targetPackage && echo 'Battery optimization whitelist granted (UID 0)'"
+                "dumpsys deviceidle whitelist +$targetPackage"
             PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE ->
-                "am set-standby-bucket $targetPackage active && echo 'Standby bucket set to ACTIVE (UID 0)'"
+                "am set-standby-bucket $targetPackage active"
             PlaybackOptimizationTask.APP_OPS_BACKGROUND ->
-                "cmd appops set $targetPackage RUN_IN_BACKGROUND allow && cmd appops set $targetPackage WAKE_LOCK allow && echo 'AppOps background execution granted'"
-            PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE ->
-                "setprop sys.fflag.override.settings_enable_monitor_phantom_procs false && /system/bin/device_config put activity_manager max_phantom_processes 2147483647 && echo 'Phantom process monitor disabled'"
-            PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK ->
-                "dumpsys audio | grep -E 'player|focus' | head -n 10"
+                "cmd appops set $targetPackage RUN_IN_BACKGROUND allow && cmd appops set $targetPackage WAKE_LOCK allow"
+            PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK, PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE -> null
+        }
+        if (rootCmd == null) {
+            return ExecutionResult(
+                command = "playback::${task.name}",
+                exitCode = 3,
+                stdout = "",
+                stderr = "Unsupported: ${task.name} requires a real per-app hook or safe device-specific implementation.",
+                executionTimeMs = 0L,
+                engineUsed = EngineType.ROOT
+            )
         }
         return executeCommand(rootCmd)
     }
