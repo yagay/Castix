@@ -95,6 +95,11 @@ than merging all of Extinguish's UI, Shizuku IPC and settings into Castix.
   `POWER_MODE_OFF` is active. If not, inspect OPlus native gesture HAL and
   kernel; never assume LSPosed can manufacture unavailable touch IRQs.
 - Confirm user app truly stays resumed and is not paused by the player itself.
+- The session also holds a bounded PARTIAL_WAKE_LOCK so a sleeping CPU cannot
+  unnecessarily suspend the root input watcher while Android still considers
+  the display interactive.
+- Touch input may still reach the underlying application when the panel is off;
+  do not assume the read-only evdev watcher consumes touches.
 - The detached watchdog is intended as a last resort; verify that it survives
   Android process death on the target ROM.
 - Verify Debug compilation and tests before merging. No APK has been verified
