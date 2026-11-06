@@ -41,7 +41,7 @@ class MainViewModel(
 
     private val appSettingsManager = AppSettingsManager.getInstance(application)
 
-    private fun tr(key: String): String = AppStrings.getForContext(getApplication(), key)
+    private fun tr(key: String, vararg args: Any?): String = AppStrings.getForContext(getApplication(), key, *args)
     private fun playbackTaskTitle(task: PlaybackOptimizationTask): String = when (task) {
         PlaybackOptimizationTask.BATTERY_WHITELIST -> tr("task_doze_title")
         PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE -> tr("task_standby_title")
@@ -205,7 +205,7 @@ class MainViewModel(
             _uiState.update {
                 it.copy(
                     isExecuting = false,
-                    notificationMessage = if (result.isSuccess) "تم استثناء التطبيق من توفير البطارية بنجاح" else "فشل الاستثناء التلقائي"
+                    notificationMessage = if (result.isSuccess) tr("notice_battery_success") else tr("notice_battery_failure")
                 )
             }
         }
@@ -266,7 +266,7 @@ class MainViewModel(
             )
             _uiState.update {
                 it.copy(
-                    notificationMessage = "Service stopped / تم إيقاف الخدمة"
+                    notificationMessage = tr("notice_service_stopped")
                 )
             }
         } else {
@@ -282,7 +282,7 @@ class MainViewModel(
             )
             _uiState.update {
                 it.copy(
-                    notificationMessage = "Service started / تم تشغيل خدمة الخلفية"
+                    notificationMessage = tr("notice_service_started")
                 )
             }
         }
@@ -421,7 +421,7 @@ class MainViewModel(
         _uiState.update { current ->
             current.copy(
                 selectedEngine = engine,
-                notificationMessage = "Active engine switched to ${engine.displayName}"
+                notificationMessage = tr("notice_engine_switched", engine.displayName)
             )
         }
         val entry = ConsoleEntry(
@@ -497,7 +497,7 @@ class MainViewModel(
                     if (opened) {
                         _uiState.update {
                             it.copy(
-                                notificationMessage = "تم الانتقال إلى تطبيق ${detectedMgr.displayName}. يرجى تفعيل إذن الروت (Superuser) لـ Castix من قائمة التطبيقات."
+                                notificationMessage = tr("notice_root_manager_opened", detectedMgr.displayName)
                             )
                         }
                         return
@@ -517,13 +517,13 @@ class MainViewModel(
                     if (granted) {
                         _uiState.update {
                             it.copy(
-                                notificationMessage = "تم منح صلاحية الروت (UID 0) بنجاح!",
+                                notificationMessage = tr("notice_root_granted"),
                                 showEngineDetailsModal = null
                             )
                         }
                     } else {
                         _uiState.update {
-                            it.copy(notificationMessage = "لم يتم الكشف عن صلاحية الروت. راجع خطوات التثبيت.")
+                            it.copy(notificationMessage = tr("notice_root_not_granted"))
                         }
                         showEngineDetails(EngineType.ROOT)
                     }
@@ -537,7 +537,7 @@ class MainViewModel(
                         )
                     )
                 }.onFailure { error ->
-                    val errorMsg = error.localizedMessage ?: "فشل طلب صلاحية الروت"
+                    val errorMsg = error.localizedMessage ?: tr("notice_root_request_failed")
                     _uiState.update { it.copy(notificationMessage = errorMsg) }
                     showEngineDetails(EngineType.ROOT)
                 }
@@ -576,7 +576,7 @@ class MainViewModel(
                     )
                 )
             }.onFailure { error ->
-                val errorMsg = error.localizedMessage ?: "Failed to request permission"
+                val errorMsg = error.localizedMessage ?: tr("notice_permission_request_failed")
                 _uiState.update {
                     it.copy(notificationMessage = errorMsg)
                 }
@@ -607,7 +607,7 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 showLSPosedDialog = false,
-                notificationMessage = "تم طلب إعادة فحص حالة موديول LSPosed."
+                notificationMessage = tr("notice_lsposed_rescan")
             )
         }
         appendConsoleLog(
@@ -628,19 +628,19 @@ class MainViewModel(
                 rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
             }.getOrDefault(false)
             if (granted) {
-                _uiState.update { it.copy(notificationMessage = "صلاحية Shizuku ممنوحة بالفعل ونشطة!") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_authorized")) }
                 return
             }
             runCatching {
                 rikka.shizuku.Shizuku.requestPermission(me.elhizazi.Castix.privilege.domain.engine.ShizukuEngine.SHIZUKU_REQUEST_CODE)
-                _uiState.update { it.copy(notificationMessage = "تم إرسال طلب الصلاحية إلى خادم Shizuku") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_request_sent")) }
             }.onFailure { err ->
-                _uiState.update { it.copy(notificationMessage = "تعذر طلب الصلاحية: ${err.localizedMessage}") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_request_error", err.localizedMessage ?: "")) }
             }
         } else {
             openShizukuManagerApp(context)
             _uiState.update {
-                it.copy(notificationMessage = "خدمة Shizuku غير مشغلة. يرجى الضغط على 'بدء' داخل التطبيق ثم العودة.")
+                it.copy(notificationMessage = tr("notice_shizuku_offline"))
             }
         }
     }
@@ -655,16 +655,16 @@ class MainViewModel(
                 return
             }
         }
-        _uiState.update { it.copy(notificationMessage = "لم يتم العثور على تطبيق Shizuku أو Shevery أو Shizuku+ مثبت على الجهاز") }
+        _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_manager_missing")) }
     }
 
     fun openRootManagerApp(context: Context): Boolean {
         val opened = me.elhizazi.Castix.privilege.domain.engine.RootEngine.openRootManagerApp(context)
         if (opened) {
             val detected = me.elhizazi.Castix.privilege.domain.engine.RootEngine.getDetectedRootManager(context)
-            val name = detected?.displayName ?: "إدارة الروت"
+            val name = detected?.displayName ?: tr("notice_root_manager_default")
             _uiState.update {
-                it.copy(notificationMessage = "تم فتح تطبيق $name. يرجى تفعيل Superuser لـ Castix من داخل التطبيق.")
+                it.copy(notificationMessage = tr("notice_root_manager_opened", name))
             }
             return true
         }
@@ -721,7 +721,7 @@ class MainViewModel(
         // 5. Fallback: If Root Manager (KernelSU / APatch / Magisk) is installed, launch it
         if (openRootManagerApp(context)) {
             _uiState.update {
-                it.copy(notificationMessage = "تم فتح تطبيق الروت. يمكنك إدارة موديول LSPosed من قسم الموديولات.")
+                it.copy(notificationMessage = tr("notice_lsposed_root_manager"))
             }
             return
         }
@@ -732,9 +732,9 @@ class MainViewModel(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(webIntent)
-            _uiState.update { it.copy(notificationMessage = "لم يتم العثور على LSPosed Manager. تم فتح صفحة التحميل.") }
+            _uiState.update { it.copy(notificationMessage = tr("notice_lsposed_download")) }
         } catch (_: Exception) {
-            _uiState.update { it.copy(notificationMessage = "لم يتم العثور على مدير LSPosed أو تطبيق روت مثبت.") }
+            _uiState.update { it.copy(notificationMessage = tr("notice_lsposed_missing")) }
         }
     }
 
@@ -744,9 +744,9 @@ class MainViewModel(
     fun onShizukuPermissionResult(granted: Boolean) {
         refreshEngineStatus()
         val msg = if (granted) {
-            "تم تفعيل صلاحية Shizuku بنجاح"
+            tr("notice_shizuku_granted")
         } else {
-            "تم رفض إذن Shizuku من قبل المستخدم"
+            tr("notice_shizuku_denied")
         }
         _uiState.update { it.copy(notificationMessage = msg) }
         appendConsoleLog(
@@ -786,9 +786,9 @@ class MainViewModel(
                 command = result.command,
                 exitCode = result.exitCode,
                 output = if (result.isSuccess) {
-                    result.stdout.ifEmpty { "[Success with exit code 0]" }
+                    result.stdout.ifEmpty { tr("notice_command_success") }
                 } else {
-                    "${result.stderr.ifEmpty { "Command failed" }}\nExit code: ${result.exitCode}"
+                    "${result.stderr.ifEmpty { tr("notice_command_failed") }}\nExit code: ${result.exitCode}"
                 },
                 isError = !result.isSuccess,
                 durationMs = result.executionTimeMs
