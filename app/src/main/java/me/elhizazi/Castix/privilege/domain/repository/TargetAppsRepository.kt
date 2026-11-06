@@ -23,6 +23,7 @@ class TargetAppsRepository(private val context: Context) {
         private const val KEY_SELECTED_PACKAGES = "key_selected_packages"
         private const val KEY_FLOATING_ENABLED = "key_floating_enabled"
         private const val KEY_FLOATING_MODE = "key_floating_mode"
+        private const val KEY_AUDIO_FOCUS_GUARD_ENABLED = "key_audio_focus_guard_enabled"
 
         val DEFAULT_TARGET_APPS = listOf(
             TargetApp("com.google.android.youtube", "YouTube", isSelected = true, isMediaApp = true),
@@ -39,6 +40,14 @@ class TargetAppsRepository(private val context: Context) {
             TargetApp("org.mozilla.firefox", "Firefox", isSelected = false, isMediaApp = true),
             TargetApp("tv.twitch.android.app", "Twitch", isSelected = false, isMediaApp = true)
         )
+    }
+
+    /** Experimental app-scoped hook policy; opt-in is disabled by default. */
+    fun isAudioFocusGuardEnabled(): Boolean =
+        prefs.getBoolean(KEY_AUDIO_FOCUS_GUARD_ENABLED, false)
+
+    fun setAudioFocusGuardEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUDIO_FOCUS_GUARD_ENABLED, enabled).apply()
     }
 
     fun getSelectedPackages(): Set<String> {
