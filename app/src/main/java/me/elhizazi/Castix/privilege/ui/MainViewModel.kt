@@ -42,6 +42,14 @@ class MainViewModel(
     private val appSettingsManager = AppSettingsManager.getInstance(application)
 
     private fun tr(key: String): String = AppStrings.getForContext(getApplication(), key)
+    private fun playbackTaskTitle(task: PlaybackOptimizationTask): String = when (task) {
+        PlaybackOptimizationTask.BATTERY_WHITELIST -> tr("task_doze_title")
+        PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE -> tr("task_standby_title")
+        PlaybackOptimizationTask.APP_OPS_BACKGROUND -> tr("task_appops_title")
+        PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE -> tr("task_phantom_title")
+        PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK -> tr("lsposed_spoofing_title")
+    }
+
 
     private val _uiState = MutableStateFlow(
         PrivilegeUiState(
@@ -818,7 +826,7 @@ class MainViewModel(
                     command = "playback::${task.name} --pkg=$pkg",
                     exitCode = -1,
                     stdout = "",
-                    stderr = e.localizedMessage ?: "Unexpected backend failure",
+                    stderr = e.localizedMessage ?: tr("screen_msg_unexpected_failure"),
                     executionTimeMs = 0L,
                     engineUsed = type
                 )
@@ -829,11 +837,11 @@ class MainViewModel(
                     engine = result.engineUsed,
                     command = result.command,
                     exitCode = result.exitCode,
-                    output = "[${task.title}] [$pkg] " +
+                    output = "[${playbackTaskTitle(task)}] [$pkg] " +
                         if (result.isSuccess) {
-                            result.stdout.ifBlank { "Command completed (not a playback guarantee)." }
+                            result.stdout.ifBlank { tr("screen_msg_command_success") }
                         } else {
-                            result.stderr.ifBlank { "Backend reported failure" }
+                            result.stderr.ifBlank { tr("screen_msg_command_failed") }
                         },
                     isError = !result.isSuccess,
                     durationMs = result.executionTimeMs
@@ -846,7 +854,7 @@ class MainViewModel(
             if (successful == targets.size) updated.add(task) else updated.remove(task)
             current.copy(
                 activePlaybackTasks = updated,
-                notificationMessage = "${task.title}: $successful/${targets.size} commands completed"
+                notificationMessage = "${playbackTaskTitle(task)}: $successful/${targets.size}" + tr("screen_msg_tasks_complete")
             )
         }
     }
