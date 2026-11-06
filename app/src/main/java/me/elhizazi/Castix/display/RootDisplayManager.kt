@@ -86,8 +86,15 @@ class RootDisplayManager private constructor(private val context: Context) {
         }
     }
 
-    fun restore() {
-        scope.launch { mutex.withLock { restoreLocked() } }
+    /**
+     * Keep the foreground service alive until the display restore attempt finishes.
+     * The callback always runs on the main thread.
+     */
+    fun restore(onComplete: (() -> Unit)? = null) {
+        scope.launch {
+            mutex.withLock { restoreLocked() }
+            if (onComplete != null) withContext(Dispatchers.Main) { onComplete() }
+        }
     }
 
     private suspend fun turnOffLocked() {
