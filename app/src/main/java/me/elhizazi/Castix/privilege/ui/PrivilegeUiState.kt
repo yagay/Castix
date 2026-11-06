@@ -23,6 +23,7 @@ data class PrivilegeUiState(
     val systemInfo: SystemDeviceInfo = SystemDeviceInfo(),
     val notificationMessage: String? = null,
     val isLSPosedHookActive: Boolean = false,
+    val isAudioFocusGuardEnabled: Boolean = false,
     val showEngineDetailsModal: EngineType? = null,
     val showShizukuDialog: Boolean = false,
     val showLSPosedDialog: Boolean = false,
