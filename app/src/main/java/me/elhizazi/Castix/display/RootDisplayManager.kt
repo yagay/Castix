@@ -66,6 +66,7 @@ class RootDisplayManager private constructor(private val context: Context) {
     private val root = RootEngine()
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val keepAwakeView = View(context)
+    private val inputGuard = InputGuardHost(context) { restore() }
     private var sessionWakeLock: PowerManager.WakeLock? = null
     private val monitoring = AtomicBoolean(false)
     private var monitorProcess: Process? = null
@@ -111,7 +112,12 @@ class RootDisplayManager private constructor(private val context: Context) {
         }
 
         try {
-            withContext(Dispatchers.Main) { attachKeepAwakeView() }
+            withContext(Dispatchers.Main) {
+                attachKeepAwakeView()
+                // A transparent input guard (not a fake black screen) prevents
+                // accidental taps reaching a live foreground app.
+                inputGuard.attach()
+            }
             acquireSessionWakeLock()
 
             // Always arrange an out-of-process recovery BEFORE switching off.
@@ -146,7 +152,10 @@ class RootDisplayManager private constructor(private val context: Context) {
             stopInputWatcher()
             if (restored) {
                 clearWatchdog()
-                withContext(Dispatchers.Main) { detachKeepAwakeView() }
+                withContext(Dispatchers.Main) {
+                    inputGuard.detach()
+                    detachKeepAwakeView()
+                }
                 releaseSessionWakeLock()
             }
             _state.value = DisplayState(Status.ERROR, e.localizedMessage ?: "Root display OFF failed")
@@ -160,7 +169,10 @@ class RootDisplayManager private constructor(private val context: Context) {
         if (restored) {
             stopInputWatcher()
             clearWatchdog()
-            withContext(Dispatchers.Main) { detachKeepAwakeView() }
+            withContext(Dispatchers.Main) {
+                inputGuard.detach()
+                detachKeepAwakeView()
+            }
             releaseSessionWakeLock()
             _state.value = DisplayState(Status.ON)
         } else {
