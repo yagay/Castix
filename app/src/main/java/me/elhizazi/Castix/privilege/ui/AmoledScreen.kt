@@ -1,5 +1,6 @@
 package me.elhizazi.Castix.privilege.ui
 
+import me.elhizazi.Castix.display.DisplayMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -701,14 +702,40 @@ fun AmoledScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
-                    // Preferred mode is the Extinguish physical panel power path,
-                    // executed as Root. 1x1 keep-awake overlay is not a black overlay.
+                    // Exactly one mode is selected. The system lock mode does
+                    // NOT lie to the player about Keyguard or Activity lifecycle.
                     AmoledSwitchRow(
                         icon = Icons.Default.PowerSettingsNew,
-                        title = "Real screen power-off (Root / Extinguish)",
-                        description = "Prefer Root to switch off the physical display panel. If disabled, use the original AMOLED black overlay. Wake gestures may vary by device.",
-                        checked = uiState.preferRootPhysicalDisplay,
-                        onCheckedChange = { viewModel.setPreferRootPhysicalDisplay(it) }
+                        title = "Physical screen-off · no lock (Root / Extinguish)",
+                        description = "Recommended for video: turn off the real panel while Android stays interactive. No password protection while this mode runs.",
+                        checked = uiState.displayMode == DisplayMode.PHYSICAL_OFF,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.PHYSICAL_OFF) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    AmoledSwitchRow(
+                        icon = Icons.Default.Security,
+                        title = "Real system lock · playback compatibility",
+                        description = "Root sends Android's normal sleep command. ColorOS keyguard and native wake gestures stay intact; some apps may pause.",
+                        checked = uiState.displayMode == DisplayMode.SYSTEM_LOCK,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.SYSTEM_LOCK) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    AmoledSwitchRow(
+                        icon = Icons.Default.BrightnessLow,
+                        title = "AMOLED overlay · manual fallback",
+                        description = "Only covers the screen with black and lowers brightness; the physical panel remains on.",
+                        checked = uiState.displayMode == DisplayMode.AMOLED_OVERLAY,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.AMOLED_OVERLAY) }
                     )
 
                     HorizontalDivider(
