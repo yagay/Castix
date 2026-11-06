@@ -20,6 +20,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,12 +85,16 @@ class CastixBackgroundService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 Log.d(TAG, "Stopping CastixBackgroundService by user action")
+                RootDisplayManager.getInstance(this).restore()
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_BLACK_SCREEN -> {
-                Log.d(TAG, "Toggling Black Screen overlay from notification")
-                BlackScreenOverlayManager.getInstance(this).toggleBlackScreen()
+                if (RootDisplayPreferences.preferRoot(this)) {
+                    RootDisplayManager.getInstance(this).toggle()
+                } else {
+                    BlackScreenOverlayManager.getInstance(this).toggleBlackScreen()
+                }
                 return START_STICKY
             }
             ACTION_REFRESH_OVERLAY -> {
@@ -114,6 +120,7 @@ class CastixBackgroundService : Service() {
         _isServiceRunning.value = false
         _isLockScreenActive.value = false
 
+        RootDisplayManager.getInstance(this).restore()
         overlayManager?.detach()
         overlayManager = null
 
