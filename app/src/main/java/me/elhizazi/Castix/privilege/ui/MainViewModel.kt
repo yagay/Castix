@@ -41,6 +41,8 @@ class MainViewModel(
 
     private val appSettingsManager = AppSettingsManager.getInstance(application)
 
+    private fun tr(key: String): String = AppStrings.getForContext(getApplication(), key)
+
     private val _uiState = MutableStateFlow(
         PrivilegeUiState(
             systemInfo = repository.getSystemInfo(),
@@ -802,7 +804,7 @@ class MainViewModel(
         val targets = _uiState.value.selectedTargetPackages.toList().sorted()
         if (targets.isEmpty()) {
             _uiState.update {
-                it.copy(notificationMessage = "Select at least one target application first.")
+                it.copy(notificationMessage = tr("screen_msg_apps_required"))
             }
             return
         }
@@ -880,8 +882,8 @@ class MainViewModel(
             it.copy(
                 isAudioFocusGuardEnabled = active,
                 notificationMessage = if (active)
-                    "Audio focus guard opted in. Select target apps, enable their LSPosed scope and restart them."
-                else "Audio focus guard disabled (restart scoped apps to remove hooks)."
+                    tr("screen_msg_audio_hook_on")
+                else tr("screen_msg_audio_hook_off")
             )
         }
         appendConsoleLog(
@@ -889,7 +891,7 @@ class MainViewModel(
                 engine = EngineType.LSPOSED,
                 command = "lsposed::set_audio_focus_policy --enabled=$active",
                 exitCode = 0,
-                output = "Saved local hook policy only. This does not confirm the hook is installed in any target process.",
+                output = tr("screen_msg_hook_saved"),
                 durationMs = 0L
             )
         )
@@ -925,7 +927,7 @@ class MainViewModel(
         val mode = RootDisplayPreferences.mode(app)
         if (mode != DisplayMode.SYSTEM_LOCK && !FloatingOverlayManager.canDrawOverlays(app)) {
             _uiState.update {
-                it.copy(notificationMessage = "Overlay permission is needed for screen-off input safety.")
+                it.copy(notificationMessage = tr("screen_msg_overlay_permission"))
             }
             return
         }
@@ -938,7 +940,7 @@ class MainViewModel(
         if (rootStatus != RootDisplayManager.Status.ON ||
             me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value) {
             _uiState.update {
-                it.copy(notificationMessage = "Restore the screen before switching display modes.")
+                it.copy(notificationMessage = tr("screen_msg_mode_switch"))
             }
             return
         }
@@ -948,11 +950,11 @@ class MainViewModel(
                 displayMode = mode,
                 notificationMessage = when (mode) {
                     DisplayMode.PHYSICAL_OFF ->
-                        "Physical panel-off is preferred: the app stays resumed; this is NOT a security lock."
+                        tr("screen_msg_mode_physical")
                     DisplayMode.SYSTEM_LOCK ->
-                        "Android will sleep and use the real ColorOS keyguard. Playback depends on each player."
+                        tr("screen_msg_mode_lock")
                     DisplayMode.AMOLED_OVERLAY ->
-                        "Manual AMOLED overlay selected; the physical panel remains powered."
+                        tr("screen_msg_mode_overlay")
                 }
             )
         }
@@ -962,7 +964,7 @@ class MainViewModel(
         val app = getApplication<Application>()
         if (RootDisplayManager.getInstance(app).state.value.isOff) {
             _uiState.update {
-                it.copy(notificationMessage = "Restore the display before changing the recovery timer.")
+                it.copy(notificationMessage = tr("screen_msg_timer_switch"))
             }
             return
         }
@@ -971,8 +973,8 @@ class MainViewModel(
             it.copy(
                 rootDisplaySafetyTestMode = enabled,
                 notificationMessage = if (enabled)
-                    "Recovery test enabled: automatic display restore after 30 seconds."
-                else "Test disabled: hard recovery watchdog remains active for two hours."
+                    tr("screen_msg_timer_on")
+                else tr("screen_msg_timer_off")
             )
         }
     }
@@ -985,7 +987,7 @@ class MainViewModel(
                 blackScreenDoubleTap = doubleTap,
                 blackScreenShowClock = showClock,
                 blackScreenZeroBrightness = zeroBrightness,
-                notificationMessage = "تم حفظ إعدادات الشاشة السوداء بنجاح"
+                notificationMessage = AppStrings.getForContext(getApplication(), "settings_saved")
             )
         }
     }
