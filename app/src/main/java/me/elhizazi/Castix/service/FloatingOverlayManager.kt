@@ -376,8 +376,12 @@ class FloatingOverlayManager(private val context: Context) {
         vibrateFeedback()
         // Root physical panel-off is preferred; the original AMOLED overlay is opt-in.
         if (me.elhizazi.Castix.display.RootDisplayPreferences.preferRoot(context)) {
-            CastixBackgroundService.start(context)
-            me.elhizazi.Castix.display.RootDisplayManager.getInstance(context).toggle()
+            runCatching {
+                CastixBackgroundService.start(context)
+                me.elhizazi.Castix.display.RootDisplayManager.getInstance(context).toggle()
+            }.onFailure { error ->
+                Log.e(TAG, "Cannot start root display controller", error)
+            }
         } else {
             BlackScreenOverlayManager.getInstance(context).showBlackScreen()
         }
