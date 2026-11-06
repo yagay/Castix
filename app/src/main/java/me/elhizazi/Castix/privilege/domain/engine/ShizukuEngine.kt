@@ -171,8 +171,17 @@ class ShizukuEngine : IPrivilegeEngine {
         }
         var process: Process? = null
         try {
-            val current = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
-                .also { process = it }
+            // Compatibility: this deprecated helper is no longer publicly exposed
+            // in some Shizuku API revisions. Invoke only after checking permission.
+            val helper = Shizuku::class.java.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            ).apply { isAccessible = true }
+            val current = (helper.invoke(null, arrayOf("sh", "-c", cmd), null, null) as? Process)
+                ?: throw IllegalStateException("Shizuku remote process unavailable")
+            process = current
             val stdout = java.io.ByteArrayOutputStream()
             val stderr = java.io.ByteArrayOutputStream()
             val outReader = Thread({
