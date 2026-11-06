@@ -2,7 +2,7 @@ package me.elhizazi.Castix.display
 
 import android.content.Context
 import android.graphics.PixelFormat
-import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -66,6 +66,7 @@ class RootDisplayManager private constructor(private val context: Context) {
     private val root = RootEngine()
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val keepAwakeView = View(context)
+    private var sessionWakeLock: PowerManager.WakeLock? = null
     private val monitoring = AtomicBoolean(false)
     private var monitorProcess: Process? = null
     private var sessionMarker: String? = null
@@ -111,6 +112,7 @@ class RootDisplayManager private constructor(private val context: Context) {
 
         try {
             withContext(Dispatchers.Main) { attachKeepAwakeView() }
+            acquireSessionWakeLock()
 
             // Always arrange an out-of-process recovery BEFORE switching off.
             val marker = "castix_${System.currentTimeMillis()}_${SystemClock.elapsedRealtime()}"
@@ -145,6 +147,7 @@ class RootDisplayManager private constructor(private val context: Context) {
             if (restored) {
                 clearWatchdog()
                 withContext(Dispatchers.Main) { detachKeepAwakeView() }
+                releaseSessionWakeLock()
             }
             _state.value = DisplayState(Status.ERROR, e.localizedMessage ?: "Root display OFF failed")
         }
@@ -158,6 +161,7 @@ class RootDisplayManager private constructor(private val context: Context) {
             stopInputWatcher()
             clearWatchdog()
             withContext(Dispatchers.Main) { detachKeepAwakeView() }
+            releaseSessionWakeLock()
             _state.value = DisplayState(Status.ON)
         } else {
             _state.value = DisplayState(
@@ -205,6 +209,29 @@ class RootDisplayManager private constructor(private val context: Context) {
     private suspend fun clearWatchdog() {
         sessionMarker = null
         root.executeCommand("rm -f ${shellQuote(markerPath)}")
+    }
+
+    private fun acquireSessionWakeLock() {
+        val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        if (sessionWakeLock == null) {
+            sessionWakeLock = power.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Castix::PhysicalDisplayOff"
+            ).apply { setReferenceCounted(false) }
+        }
+        if (sessionWakeLock?.isHeld != true) {
+            val maxMs = if (RootDisplayPreferences.safetyTestMode(context))
+                (SAFETY_TEST_SECONDS + 10L) * 1000L
+            else (WATCHDOG_SECONDS + 60L) * 1000L
+            sessionWakeLock?.acquire(maxMs)
+        }
+    }
+
+    private fun releaseSessionWakeLock() {
+        runCatching {
+            if (sessionWakeLock?.isHeld == true) sessionWakeLock?.release()
+        }
+        sessionWakeLock = null
     }
 
     private fun attachKeepAwakeView() {
