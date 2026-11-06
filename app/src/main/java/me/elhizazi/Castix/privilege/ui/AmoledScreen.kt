@@ -1,5 +1,6 @@
 package me.elhizazi.Castix.privilege.ui
 
+import me.elhizazi.Castix.display.DisplayMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TouchApp
@@ -700,7 +702,61 @@ fun AmoledScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
-                    // Double Tap to Wake
+                    // Exactly one mode is selected. The system lock mode does
+                    // NOT lie to the player about Keyguard or Activity lifecycle.
+                    AmoledSwitchRow(
+                        icon = Icons.Default.PowerSettingsNew,
+                        title = AppStrings.get("screen_mode_physical_title", lang),
+                        description = AppStrings.get("screen_mode_physical_desc", lang),
+                        checked = uiState.displayMode == DisplayMode.PHYSICAL_OFF,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.PHYSICAL_OFF) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    AmoledSwitchRow(
+                        icon = Icons.Default.Security,
+                        title = AppStrings.get("screen_mode_lock_title", lang),
+                        description = AppStrings.get("screen_mode_lock_desc", lang),
+                        checked = uiState.displayMode == DisplayMode.SYSTEM_LOCK,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.SYSTEM_LOCK) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    AmoledSwitchRow(
+                        icon = Icons.Default.BrightnessLow,
+                        title = AppStrings.get("screen_mode_overlay_title", lang),
+                        description = AppStrings.get("screen_mode_overlay_desc", lang),
+                        checked = uiState.displayMode == DisplayMode.AMOLED_OVERLAY,
+                        onCheckedChange = { if (it) viewModel.setDisplayMode(DisplayMode.AMOLED_OVERLAY) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    AmoledSwitchRow(
+                        icon = Icons.Default.Security,
+                        title = AppStrings.get("screen_mode_safety_title", lang),
+                        description = AppStrings.get("screen_mode_safety_desc", lang),
+                        checked = uiState.rootDisplaySafetyTestMode,
+                        onCheckedChange = { viewModel.setRootDisplaySafetyTestMode(it) }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+
+                    // Double Tap to Wake (AMOLED overlay, or best-effort Root input listener).
                     AmoledSwitchRow(
                         icon = Icons.Default.TouchApp,
                         title = AppStrings.get("settings_double_tap_wake", lang),

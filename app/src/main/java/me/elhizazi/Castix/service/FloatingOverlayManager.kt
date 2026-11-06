@@ -374,8 +374,7 @@ class FloatingOverlayManager(private val context: Context) {
 
     private fun onFloatingButtonClicked() {
         vibrateFeedback()
-        // Immediately turn off the screen using pure AMOLED Black Screen overlay
-        BlackScreenOverlayManager.getInstance(context).showBlackScreen()
+        me.elhizazi.Castix.display.ScreenModeController.activate(context)
     }
 
     private fun openSettingsUi() {

@@ -116,12 +116,18 @@ class RootEngine : IPrivilegeEngine {
     }
 
     override suspend fun checkPermission(context: Context): Boolean = withContext(Dispatchers.IO) {
+        var process: Process? = null
         try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-            exitCode == 0 && output.contains("uid=0(root)")
+            process = ProcessBuilder("su", "-c", "id").redirectErrorStream(true).start()
+            val finished = process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                return@withContext false
+            }
+            process.exitValue() == 0 &&
+                process.inputStream.bufferedReader().use { it.readText() }.contains("uid=0(root)")
         } catch (_: Exception) {
+            process?.destroyForcibly()
             false
         }
     }

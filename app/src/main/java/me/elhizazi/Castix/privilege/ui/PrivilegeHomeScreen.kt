@@ -329,6 +329,7 @@ fun PrivilegeHomeScreen(
                             item(key = "black_screen_card") {
                                 BlackScreenQuickCard(
                                     isBlackScreenActive = uiState.isBlackScreenActive,
+                                    displayMode = uiState.displayMode,
                                     hasOverlayPermission = uiState.hasOverlayPermission,
                                     isServiceRunning = uiState.isServiceRunning,
                                     isFloatingButtonEnabled = uiState.isFloatingButtonEnabled,

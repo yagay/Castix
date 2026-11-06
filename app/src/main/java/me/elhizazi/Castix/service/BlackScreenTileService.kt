@@ -9,10 +9,16 @@ import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
+import me.elhizazi.Castix.privilege.ui.AppStrings
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.DisplayMode
+import me.elhizazi.Castix.display.RootDisplayPreferences
+import me.elhizazi.Castix.display.ScreenModeController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -28,11 +34,13 @@ class BlackScreenTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
-        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value)
+        observeJob?.cancel()
+        val root = RootDisplayManager.getInstance(applicationContext)
+        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value || root.state.value.isOff)
         observeJob = serviceScope.launch {
-            BlackScreenOverlayManager.isBlackScreenActive.collectLatest { isActive ->
-                updateTileState(isActive)
-            }
+            combine(BlackScreenOverlayManager.isBlackScreenActive, root.state) { overlay, physical ->
+                overlay || physical.isOff
+            }.collectLatest { updateTileState(it) }
         }
     }
 
@@ -45,7 +53,8 @@ class BlackScreenTileService : TileService() {
     override fun onClick() {
         super.onClick()
         val app = applicationContext
-        if (!FloatingOverlayManager.canDrawOverlays(app)) {
+        if (RootDisplayPreferences.mode(app) != DisplayMode.SYSTEM_LOCK &&
+            !FloatingOverlayManager.canDrawOverlays(app)) {
             // If overlay permission is not granted, open main app
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -65,18 +74,24 @@ class BlackScreenTileService : TileService() {
             return
         }
 
-        // Toggle Black Screen AMOLED Edge-to-Edge
-        val manager = BlackScreenOverlayManager.getInstance(app)
-        manager.toggleBlackScreen()
-        updateTileState(BlackScreenOverlayManager.isBlackScreenActive.value)
+        ScreenModeController.activate(app)
     }
 
     private fun updateTileState(isActive: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = if (isActive) "إلغاء الشاشة السوداء" else "إطفاء الشاشة"
+        val mode = RootDisplayPreferences.mode(applicationContext)
+        tile.label = when {
+            mode == DisplayMode.SYSTEM_LOCK -> AppStrings.getForContext(applicationContext, "screen_tile_lock")
+            isActive -> AppStrings.getForContext(applicationContext, "screen_tile_restore")
+            else -> AppStrings.getForContext(applicationContext, "screen_tile_off")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (isActive) "AMOLED شغال" else "Castix"
+            tile.subtitle = when (mode) {
+                DisplayMode.PHYSICAL_OFF -> AppStrings.getForContext(applicationContext, "screen_tile_root")
+                DisplayMode.SYSTEM_LOCK -> AppStrings.getForContext(applicationContext, "screen_tile_keyguard")
+                DisplayMode.AMOLED_OVERLAY -> AppStrings.getForContext(applicationContext, "screen_tile_overlay")
+            }
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_black_screen)
         tile.updateTile()

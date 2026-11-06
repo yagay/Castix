@@ -17,6 +17,10 @@ import me.elhizazi.Castix.privilege.domain.model.FloatingButtonMode
 import me.elhizazi.Castix.privilege.domain.model.PlaybackOptimizationTask
 import me.elhizazi.Castix.privilege.domain.repository.PrivilegeEngineRepository
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
+import me.elhizazi.Castix.display.DisplayMode
+import me.elhizazi.Castix.display.ScreenModeController
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.service.CastixBackgroundService
 import me.elhizazi.Castix.service.FloatingOverlayManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +41,16 @@ class MainViewModel(
 
     private val appSettingsManager = AppSettingsManager.getInstance(application)
 
+    private fun tr(key: String, vararg args: Any?): String = AppStrings.getForContext(getApplication(), key, *args)
+    private fun playbackTaskTitle(task: PlaybackOptimizationTask): String = when (task) {
+        PlaybackOptimizationTask.BATTERY_WHITELIST -> tr("task_doze_title")
+        PlaybackOptimizationTask.STANDBY_BUCKET_ACTIVE -> tr("task_standby_title")
+        PlaybackOptimizationTask.APP_OPS_BACKGROUND -> tr("task_appops_title")
+        PlaybackOptimizationTask.PHANTOM_KILLER_DISABLE -> tr("task_phantom_title")
+        PlaybackOptimizationTask.AUDIO_FOCUS_HIJACK -> tr("lsposed_spoofing_title")
+    }
+
+
     private val _uiState = MutableStateFlow(
         PrivilegeUiState(
             systemInfo = repository.getSystemInfo(),
@@ -44,7 +58,9 @@ class MainViewModel(
             isFloatingButtonEnabled = targetAppsRepo.isFloatingButtonEnabled(),
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
             selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
-            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled()
+            isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled(),
+            displayMode = RootDisplayPreferences.mode(application),
+            rootDisplaySafetyTestMode = RootDisplayPreferences.safetyTestMode(application)
         )
     )
     val uiState: StateFlow<PrivilegeUiState> = _uiState.asStateFlow()
@@ -67,6 +83,7 @@ class MainViewModel(
         refreshPermissionsAndLockState()
         loadTargetApps()
         observeBlackScreenStatus()
+        observeScreenActionErrors()
     }
 
     private fun observeBlackScreenStatus() {
@@ -78,9 +95,34 @@ class MainViewModel(
                 blackScreenZeroBrightness = manager.zeroBrightness
             )
         }
+        val rootManager = RootDisplayManager.getInstance(getApplication())
         viewModelScope.launch {
             me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.collect { active ->
-                _uiState.update { it.copy(isBlackScreenActive = active) }
+                _uiState.update {
+                    it.copy(isBlackScreenActive = active || rootManager.state.value.isOff)
+                }
+            }
+        }
+        viewModelScope.launch {
+            rootManager.state.collect { physical ->
+                _uiState.update {
+                    it.copy(
+                        isBlackScreenActive = physical.isOff ||
+                            me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value,
+                        notificationMessage = if (physical.message.isNotBlank())
+                            physical.message else it.notificationMessage
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observeScreenActionErrors() {
+        viewModelScope.launch {
+            ScreenModeController.lastError.collect { message ->
+                if (!message.isNullOrBlank()) {
+                    _uiState.update { it.copy(notificationMessage = message) }
+                }
             }
         }
     }
@@ -163,7 +205,7 @@ class MainViewModel(
             _uiState.update {
                 it.copy(
                     isExecuting = false,
-                    notificationMessage = if (result.isSuccess) "تم استثناء التطبيق من توفير البطارية بنجاح" else "فشل الاستثناء التلقائي"
+                    notificationMessage = if (result.isSuccess) tr("notice_battery_success") else tr("notice_battery_failure")
                 )
             }
         }
@@ -224,7 +266,7 @@ class MainViewModel(
             )
             _uiState.update {
                 it.copy(
-                    notificationMessage = "Service stopped / تم إيقاف الخدمة"
+                    notificationMessage = tr("notice_service_stopped")
                 )
             }
         } else {
@@ -232,15 +274,15 @@ class MainViewModel(
             appendConsoleLog(
                 ConsoleEntry(
                     engine = _uiState.value.selectedEngine,
-                    command = "service::start --foreground --type=mediaPlayback --wakeLock=PARTIAL",
+                    command = "service::start --foreground --type=specialUse --wakeLock=screenOffOnly",
                     exitCode = 0,
-                    output = "Castix Background Service started.\nStatus Bar Notification: ACTIVE (VISIBILITY_PUBLIC)\nCPU WakeLock: ENGAGED for Lock Screen bypass.",
+                    output = "Castix Background Service started.\nStatus Bar Notification: ACTIVE (VISIBILITY_PUBLIC)\nCPU WakeLock: only when the device is genuinely non-interactive.",
                     durationMs = 12
                 )
             )
             _uiState.update {
                 it.copy(
-                    notificationMessage = "Service started / تم تشغيل خدمة الخلفية"
+                    notificationMessage = tr("notice_service_started")
                 )
             }
         }
@@ -379,7 +421,7 @@ class MainViewModel(
         _uiState.update { current ->
             current.copy(
                 selectedEngine = engine,
-                notificationMessage = "Active engine switched to ${engine.displayName}"
+                notificationMessage = tr("notice_engine_switched", engine.displayName)
             )
         }
         val entry = ConsoleEntry(
@@ -455,7 +497,7 @@ class MainViewModel(
                     if (opened) {
                         _uiState.update {
                             it.copy(
-                                notificationMessage = "تم الانتقال إلى تطبيق ${detectedMgr.displayName}. يرجى تفعيل إذن الروت (Superuser) لـ Castix من قائمة التطبيقات."
+                                notificationMessage = tr("notice_root_manager_opened", detectedMgr.displayName)
                             )
                         }
                         return
@@ -475,13 +517,13 @@ class MainViewModel(
                     if (granted) {
                         _uiState.update {
                             it.copy(
-                                notificationMessage = "تم منح صلاحية الروت (UID 0) بنجاح!",
+                                notificationMessage = tr("notice_root_granted"),
                                 showEngineDetailsModal = null
                             )
                         }
                     } else {
                         _uiState.update {
-                            it.copy(notificationMessage = "لم يتم الكشف عن صلاحية الروت. راجع خطوات التثبيت.")
+                            it.copy(notificationMessage = tr("notice_root_not_granted"))
                         }
                         showEngineDetails(EngineType.ROOT)
                     }
@@ -495,7 +537,7 @@ class MainViewModel(
                         )
                     )
                 }.onFailure { error ->
-                    val errorMsg = error.localizedMessage ?: "فشل طلب صلاحية الروت"
+                    val errorMsg = error.localizedMessage ?: tr("notice_root_request_failed")
                     _uiState.update { it.copy(notificationMessage = errorMsg) }
                     showEngineDetails(EngineType.ROOT)
                 }
@@ -534,7 +576,7 @@ class MainViewModel(
                     )
                 )
             }.onFailure { error ->
-                val errorMsg = error.localizedMessage ?: "Failed to request permission"
+                val errorMsg = error.localizedMessage ?: tr("notice_permission_request_failed")
                 _uiState.update {
                     it.copy(notificationMessage = errorMsg)
                 }
@@ -565,7 +607,7 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 showLSPosedDialog = false,
-                notificationMessage = "تم طلب إعادة فحص حالة موديول LSPosed."
+                notificationMessage = tr("notice_lsposed_rescan")
             )
         }
         appendConsoleLog(
@@ -586,19 +628,19 @@ class MainViewModel(
                 rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
             }.getOrDefault(false)
             if (granted) {
-                _uiState.update { it.copy(notificationMessage = "صلاحية Shizuku ممنوحة بالفعل ونشطة!") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_authorized")) }
                 return
             }
             runCatching {
                 rikka.shizuku.Shizuku.requestPermission(me.elhizazi.Castix.privilege.domain.engine.ShizukuEngine.SHIZUKU_REQUEST_CODE)
-                _uiState.update { it.copy(notificationMessage = "تم إرسال طلب الصلاحية إلى خادم Shizuku") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_request_sent")) }
             }.onFailure { err ->
-                _uiState.update { it.copy(notificationMessage = "تعذر طلب الصلاحية: ${err.localizedMessage}") }
+                _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_request_error", err.localizedMessage ?: "")) }
             }
         } else {
             openShizukuManagerApp(context)
             _uiState.update {
-                it.copy(notificationMessage = "خدمة Shizuku غير مشغلة. يرجى الضغط على 'بدء' داخل التطبيق ثم العودة.")
+                it.copy(notificationMessage = tr("notice_shizuku_offline"))
             }
         }
     }
@@ -613,16 +655,16 @@ class MainViewModel(
                 return
             }
         }
-        _uiState.update { it.copy(notificationMessage = "لم يتم العثور على تطبيق Shizuku أو Shevery أو Shizuku+ مثبت على الجهاز") }
+        _uiState.update { it.copy(notificationMessage = tr("notice_shizuku_manager_missing")) }
     }
 
     fun openRootManagerApp(context: Context): Boolean {
         val opened = me.elhizazi.Castix.privilege.domain.engine.RootEngine.openRootManagerApp(context)
         if (opened) {
             val detected = me.elhizazi.Castix.privilege.domain.engine.RootEngine.getDetectedRootManager(context)
-            val name = detected?.displayName ?: "إدارة الروت"
+            val name = detected?.displayName ?: tr("notice_root_manager_default")
             _uiState.update {
-                it.copy(notificationMessage = "تم فتح تطبيق $name. يرجى تفعيل Superuser لـ Castix من داخل التطبيق.")
+                it.copy(notificationMessage = tr("notice_root_manager_opened", name))
             }
             return true
         }
@@ -679,7 +721,7 @@ class MainViewModel(
         // 5. Fallback: If Root Manager (KernelSU / APatch / Magisk) is installed, launch it
         if (openRootManagerApp(context)) {
             _uiState.update {
-                it.copy(notificationMessage = "تم فتح تطبيق الروت. يمكنك إدارة موديول LSPosed من قسم الموديولات.")
+                it.copy(notificationMessage = tr("notice_lsposed_root_manager"))
             }
             return
         }
@@ -690,9 +732,9 @@ class MainViewModel(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(webIntent)
-            _uiState.update { it.copy(notificationMessage = "لم يتم العثور على LSPosed Manager. تم فتح صفحة التحميل.") }
+            _uiState.update { it.copy(notificationMessage = tr("notice_lsposed_download")) }
         } catch (_: Exception) {
-            _uiState.update { it.copy(notificationMessage = "لم يتم العثور على مدير LSPosed أو تطبيق روت مثبت.") }
+            _uiState.update { it.copy(notificationMessage = tr("notice_lsposed_missing")) }
         }
     }
 
@@ -702,9 +744,9 @@ class MainViewModel(
     fun onShizukuPermissionResult(granted: Boolean) {
         refreshEngineStatus()
         val msg = if (granted) {
-            "تم تفعيل صلاحية Shizuku بنجاح"
+            tr("notice_shizuku_granted")
         } else {
-            "تم رفض إذن Shizuku من قبل المستخدم"
+            tr("notice_shizuku_denied")
         }
         _uiState.update { it.copy(notificationMessage = msg) }
         appendConsoleLog(
@@ -744,9 +786,9 @@ class MainViewModel(
                 command = result.command,
                 exitCode = result.exitCode,
                 output = if (result.isSuccess) {
-                    result.stdout.ifEmpty { "[Success with exit code 0]" }
+                    result.stdout.ifEmpty { tr("notice_command_success") }
                 } else {
-                    "${result.stderr.ifEmpty { "Command failed" }}\nExit code: ${result.exitCode}"
+                    "${result.stderr.ifEmpty { tr("notice_command_failed") }}\nExit code: ${result.exitCode}"
                 },
                 isError = !result.isSuccess,
                 durationMs = result.executionTimeMs
@@ -770,7 +812,7 @@ class MainViewModel(
         val targets = _uiState.value.selectedTargetPackages.toList().sorted()
         if (targets.isEmpty()) {
             _uiState.update {
-                it.copy(notificationMessage = "Select at least one target application first.")
+                it.copy(notificationMessage = tr("screen_msg_apps_required"))
             }
             return
         }
@@ -784,7 +826,7 @@ class MainViewModel(
                     command = "playback::${task.name} --pkg=$pkg",
                     exitCode = -1,
                     stdout = "",
-                    stderr = e.localizedMessage ?: "Unexpected backend failure",
+                    stderr = e.localizedMessage ?: tr("screen_msg_unexpected_failure"),
                     executionTimeMs = 0L,
                     engineUsed = type
                 )
@@ -795,11 +837,11 @@ class MainViewModel(
                     engine = result.engineUsed,
                     command = result.command,
                     exitCode = result.exitCode,
-                    output = "[${task.title}] [$pkg] " +
+                    output = "[${playbackTaskTitle(task)}] [$pkg] " +
                         if (result.isSuccess) {
-                            result.stdout.ifBlank { "Command completed (not a playback guarantee)." }
+                            result.stdout.ifBlank { tr("screen_msg_command_success") }
                         } else {
-                            result.stderr.ifBlank { "Backend reported failure" }
+                            result.stderr.ifBlank { tr("screen_msg_command_failed") }
                         },
                     isError = !result.isSuccess,
                     durationMs = result.executionTimeMs
@@ -812,7 +854,7 @@ class MainViewModel(
             if (successful == targets.size) updated.add(task) else updated.remove(task)
             current.copy(
                 activePlaybackTasks = updated,
-                notificationMessage = "${task.title}: $successful/${targets.size} commands completed"
+                notificationMessage = "${playbackTaskTitle(task)}: $successful/${targets.size}" + tr("screen_msg_tasks_complete")
             )
         }
     }
@@ -848,8 +890,8 @@ class MainViewModel(
             it.copy(
                 isAudioFocusGuardEnabled = active,
                 notificationMessage = if (active)
-                    "Audio focus guard opted in. Select target apps, enable their LSPosed scope and restart them."
-                else "Audio focus guard disabled (restart scoped apps to remove hooks)."
+                    tr("screen_msg_audio_hook_on")
+                else tr("screen_msg_audio_hook_off")
             )
         }
         appendConsoleLog(
@@ -857,7 +899,7 @@ class MainViewModel(
                 engine = EngineType.LSPOSED,
                 command = "lsposed::set_audio_focus_policy --enabled=$active",
                 exitCode = 0,
-                output = "Saved local hook policy only. This does not confirm the hook is installed in any target process.",
+                output = tr("screen_msg_hook_saved"),
                 durationMs = 0L
             )
         )
@@ -890,15 +932,59 @@ class MainViewModel(
 
     fun toggleBlackScreen() {
         val app = getApplication<Application>()
-        val hasOverlay = FloatingOverlayManager.canDrawOverlays(app)
-        if (!hasOverlay) {
+        val mode = RootDisplayPreferences.mode(app)
+        if (mode != DisplayMode.SYSTEM_LOCK && !FloatingOverlayManager.canDrawOverlays(app)) {
             _uiState.update {
-                it.copy(notificationMessage = "يرجى منح إذن الظهور فوق التطبيقات أولاً لتشغيل الشاشة السوداء")
+                it.copy(notificationMessage = tr("screen_msg_overlay_permission"))
             }
             return
         }
-        val manager = me.elhizazi.Castix.service.BlackScreenOverlayManager.getInstance(app)
-        manager.toggleBlackScreen()
+        ScreenModeController.activate(app)
+    }
+
+    fun setDisplayMode(mode: DisplayMode) {
+        val app = getApplication<Application>()
+        val rootStatus = RootDisplayManager.getInstance(app).state.value.status
+        if (rootStatus != RootDisplayManager.Status.ON ||
+            me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value) {
+            _uiState.update {
+                it.copy(notificationMessage = tr("screen_msg_mode_switch"))
+            }
+            return
+        }
+        RootDisplayPreferences.setMode(app, mode)
+        _uiState.update {
+            it.copy(
+                displayMode = mode,
+                notificationMessage = when (mode) {
+                    DisplayMode.PHYSICAL_OFF ->
+                        tr("screen_msg_mode_physical")
+                    DisplayMode.SYSTEM_LOCK ->
+                        tr("screen_msg_mode_lock")
+                    DisplayMode.AMOLED_OVERLAY ->
+                        tr("screen_msg_mode_overlay")
+                }
+            )
+        }
+    }
+
+    fun setRootDisplaySafetyTestMode(enabled: Boolean) {
+        val app = getApplication<Application>()
+        if (RootDisplayManager.getInstance(app).state.value.isOff) {
+            _uiState.update {
+                it.copy(notificationMessage = tr("screen_msg_timer_switch"))
+            }
+            return
+        }
+        RootDisplayPreferences.setSafetyTestMode(app, enabled)
+        _uiState.update {
+            it.copy(
+                rootDisplaySafetyTestMode = enabled,
+                notificationMessage = if (enabled)
+                    tr("screen_msg_timer_on")
+                else tr("screen_msg_timer_off")
+            )
+        }
     }
 
     fun updateBlackScreenSettings(doubleTap: Boolean, showClock: Boolean, zeroBrightness: Boolean) {
@@ -909,7 +995,7 @@ class MainViewModel(
                 blackScreenDoubleTap = doubleTap,
                 blackScreenShowClock = showClock,
                 blackScreenZeroBrightness = zeroBrightness,
-                notificationMessage = "تم حفظ إعدادات الشاشة السوداء بنجاح"
+                notificationMessage = AppStrings.getForContext(getApplication(), "settings_saved")
             )
         }
     }

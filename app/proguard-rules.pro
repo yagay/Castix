@@ -1,3 +1,8 @@
+# -----------------------------------------------------------------------------
+# Root physical display bridge (invoked by app_process via class name)
+# -----------------------------------------------------------------------------
+-keep class me.elhizazi.Castix.display.RootDisplayCli { public static void main(java.lang.String[]); }
+
 # Castix R8 / ProGuard rules
 # Keep the rules intentionally focused on runtime/reflection/IPC entry points.
 

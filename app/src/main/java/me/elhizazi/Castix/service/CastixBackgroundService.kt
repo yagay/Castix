@@ -20,6 +20,10 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
+import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.DisplayMode
+import me.elhizazi.Castix.display.ScreenModeController
+import me.elhizazi.Castix.display.RootDisplayPreferences
 import me.elhizazi.Castix.privilege.domain.repository.TargetAppsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,12 +87,17 @@ class CastixBackgroundService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 Log.d(TAG, "Stopping CastixBackgroundService by user action")
-                stopSelf()
+                RootDisplayManager.getInstance(this).restore { stopSelf() }
                 return START_NOT_STICKY
             }
             ACTION_BLACK_SCREEN -> {
-                Log.d(TAG, "Toggling Black Screen overlay from notification")
-                BlackScreenOverlayManager.getInstance(this).toggleBlackScreen()
+                // A notification PendingIntent can start this service cold. Become
+                // foreground before executing any screen or lock operation.
+                if (!_isServiceRunning.value) {
+                    startForegroundNotification()
+                    _isServiceRunning.value = true
+                }
+                ScreenModeController.activate(this)
                 return START_STICKY
             }
             ACTION_REFRESH_OVERLAY -> {
@@ -114,6 +123,7 @@ class CastixBackgroundService : Service() {
         _isServiceRunning.value = false
         _isLockScreenActive.value = false
 
+        RootDisplayManager.getInstance(this).restore()
         overlayManager?.detach()
         overlayManager = null
 
@@ -184,7 +194,7 @@ class CastixBackgroundService : Service() {
             )
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Stop / إيقاف",
+                AppStrings.getForContext(this, "service_btn_stop"),
                 stopPendingIntent
             )
             .build()

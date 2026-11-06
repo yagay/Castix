@@ -1,5 +1,6 @@
 package me.elhizazi.Castix.privilege.ui
 
+import me.elhizazi.Castix.display.DisplayMode
 import me.elhizazi.Castix.privilege.domain.model.ConsoleEntry
 import me.elhizazi.Castix.privilege.domain.model.EngineType
 import me.elhizazi.Castix.privilege.domain.model.FloatingButtonMode
@@ -46,6 +47,8 @@ data class PrivilegeUiState(
     val isBatteryOptimizationIgnored: Boolean = false,
     // Black Screen & App Navigation State
     val isBlackScreenActive: Boolean = false,
+    val displayMode: DisplayMode = DisplayMode.PHYSICAL_OFF,
+    val rootDisplaySafetyTestMode: Boolean = true,
     val blackScreenDoubleTap: Boolean = true,
     val blackScreenShowClock: Boolean = true,
     val blackScreenZeroBrightness: Boolean = true,

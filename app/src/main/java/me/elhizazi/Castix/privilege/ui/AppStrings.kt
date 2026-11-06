@@ -16,10 +16,18 @@ data class AppLanguage(
 
 object LanguageRegistry {
     val supportedLanguages: List<AppLanguage>
-        get() = listOf(
+        get() = (listOf(
             AppLanguage(code = "en", nativeName = "English", englishName = "English"),
             AppLanguage(code = "ar", nativeName = "العربية", englishName = "Arabic", isRtl = true)
-        ) + AppStringsSecondary.languages
+        ) + AppStringsSecondary.languages).sortedBy {
+            // Put the two fully supported screen-mode locales first, without
+            // deleting any of the project's existing community translations.
+            when (it.code) {
+                "en" -> 0
+                "zh" -> 1
+                else -> 2
+            }
+        }
 
     fun findLanguage(code: String): AppLanguage {
         val effective = AppStrings.resolveEffectiveLanguage(code)
@@ -35,11 +43,20 @@ object AppStrings {
         get() = coreCodes + AppStringsSecondary.languages.map { it.code }
 
     fun resolveEffectiveLanguage(lang: String): String {
+        // Accept both short codes and language tags (e.g. zh-CN or en-GB).
         val normalized = lang.trim().lowercase(Locale.ROOT)
-        if (normalized in supportedCodes) return normalized
+        val baseLanguage = normalized.substringBefore('-').substringBefore('_')
+        if (normalized != "auto" && baseLanguage in supportedCodes) return baseLanguage
 
-        val systemLanguage = Locale.getDefault().language.lowercase(Locale.ROOT)
-        return if (systemLanguage in supportedCodes) systemLanguage else "en"
+        // Use the device locale, not Locale.getDefault(): the latter is modified
+        // when Castix switches to a manually selected app language, making
+        // "Auto" incorrectly keep that previously selected language.
+        val systemLanguage = runCatching {
+            android.content.res.Resources.getSystem().configuration.locales[0]
+                .language.lowercase(Locale.ROOT)
+        }.getOrElse { Locale.getDefault().language.lowercase(Locale.ROOT) }
+        val systemBase = systemLanguage.substringBefore('-').substringBefore('_')
+        return if (systemBase in supportedCodes) systemBase else "en"
     }
 
     fun get(key: String, lang: String = "auto", vararg args: Any?): String {
@@ -71,6 +88,88 @@ object AppStrings {
     }
 
     val en = mapOf(
+        "notice_battery_success" to "Battery optimization exemption applied successfully.",
+        "notice_battery_failure" to "Could not apply battery optimization exemption.",
+        "notice_service_stopped" to "Background service stopped.",
+        "notice_service_started" to "Background service started.",
+        "notice_engine_switched" to "Active engine changed to %1\$s.",
+        "notice_root_manager_opened" to "Opened %1\$s. Enable Root permission for Castix in the manager.",
+        "notice_root_granted" to "Root permission (UID 0) granted.",
+        "notice_root_not_granted" to "Root permission was not detected. Check Root manager settings.",
+        "notice_root_request_failed" to "Failed to request Root permission.",
+        "notice_root_manager_default" to "Root manager",
+        "notice_permission_request_failed" to "Failed to request permission.",
+        "notice_lsposed_rescan" to "LSPosed module status refresh requested.",
+        "notice_shizuku_authorized" to "Shizuku is already authorized and running.",
+        "notice_shizuku_request_sent" to "Shizuku permission request sent.",
+        "notice_shizuku_request_error" to "Shizuku permission request failed: %1\$s",
+        "notice_shizuku_offline" to "Shizuku is not running. Open its manager, start the service and return.",
+        "notice_shizuku_manager_missing" to "Shizuku, Shizuku+ or Shevery is not installed.",
+        "notice_lsposed_root_manager" to "Opened Root manager. You can manage LSPosed in its modules section.",
+        "notice_lsposed_download" to "LSPosed Manager was not found. Opened the download page.",
+        "notice_lsposed_missing" to "LSPosed Manager and Root manager were not found.",
+        "notice_shizuku_granted" to "Shizuku permission granted.",
+        "notice_shizuku_denied" to "Shizuku permission was denied.",
+        "notice_command_failed" to "Command failed",
+        "notice_command_success" to "Completed with exit code 0",
+        "screen_root_watchdog_failed" to "Cannot install the Root display recovery timer.",
+        "screen_root_watcher_failed" to "Root input watcher unavailable; physical display was not turned off.",
+        "settings_saved" to "Settings saved.",
+        "screen_msg_tasks_complete" to " commands completed",
+        "screen_msg_command_success" to "Command completed; this does not guarantee continued playback.",
+        "screen_msg_command_failed" to "Backend reported a failure.",
+        "screen_msg_unexpected_failure" to "Unexpected backend error.",
+        "screen_error_unsupported" to "The requested function is not supported on this device.",
+        "screen_mode_physical_title" to "Physical screen-off · no lock (Root / Extinguish)",
+        "screen_mode_physical_desc" to "Recommended for video: the physical panel turns off while Android stays interactive. This is not password protection.",
+        "screen_mode_lock_title" to "Real system lock · playback compatibility",
+        "screen_mode_lock_desc" to "Use normal Android sleep and ColorOS keyguard. Native wake gestures remain available; some players may pause.",
+        "screen_mode_overlay_title" to "AMOLED overlay · manual fallback",
+        "screen_mode_overlay_desc" to "Covers the display in black and lowers brightness. The physical panel stays powered.",
+        "screen_mode_safety_title" to "30-second automatic recovery test",
+        "screen_mode_safety_desc" to "Restore the physical display after 30 seconds. Keep this enabled until wake gestures are tested on your phone.",
+        "screen_home_lock_title" to "Real system lock",
+        "screen_home_physical_title" to "Physical panel-off",
+        "screen_home_lock_desc" to "Normal Android / ColorOS keyguard; playback depends on the app.",
+        "screen_home_physical_desc" to "Root / Extinguish turns the real panel off without activating the keyguard.",
+        "screen_home_keyguard" to "KEYGUARD",
+        "screen_home_secure_sleep" to "Secure sleep",
+        "screen_home_lock_action" to "Lock screen",
+        "screen_home_lock_tip" to "Real Android lock. No fake unlocked status; LSPosed compatibility is per app.",
+        "screen_home_physical_tip" to "This mode does not lock your phone. A transparent input layer blocks app-area touches.",
+        "screen_tile_lock" to "Lock screen",
+        "screen_tile_restore" to "Restore display",
+        "screen_tile_off" to "Turn display off",
+        "screen_tile_root" to "Physical panel · Root",
+        "screen_tile_keyguard" to "ColorOS keyguard",
+        "screen_tile_overlay" to "AMOLED overlay",
+        "screen_err_overlay_active" to "Close the AMOLED overlay before turning off the physical panel.",
+        "screen_err_restore_before_mode" to "Restore the physical screen before switching modes.",
+        "screen_err_secure_lock_setup" to "Set a PIN, password or pattern before using secure lock mode.",
+        "screen_err_restore_before_lock" to "Restore the physical screen before system locking.",
+        "screen_err_root_sleep" to "Root permission is required to request system sleep.",
+        "screen_err_sleep_command" to "Android sleep command failed.",
+        "screen_err_still_interactive" to "ColorOS did not enter sleep after the command.",
+        "screen_err_lock_failed" to "System lock failed: ",
+        "screen_err_action_failed" to "Display action failed: ",
+        "screen_msg_overlay_permission" to "Overlay permission is required to protect against accidental touches.",
+        "screen_msg_mode_switch" to "Restore the screen before switching display modes.",
+        "screen_msg_mode_physical" to "Physical screen-off selected. The app remains active; this is not a security lock.",
+        "screen_msg_mode_lock" to "System lock selected. ColorOS will use its real keyguard; playback depends on each app.",
+        "screen_msg_mode_overlay" to "AMOLED black overlay selected; the physical panel remains on.",
+        "screen_msg_timer_switch" to "Restore the display before changing the recovery timer.",
+        "screen_msg_timer_on" to "30-second safety recovery test enabled.",
+        "screen_msg_timer_off" to "30-second test disabled. The two-hour Root recovery timer remains active.",
+        "screen_msg_apps_required" to "Select at least one target application first.",
+        "screen_msg_audio_hook_on" to "Audio guard configured. Select target apps, enable LSPosed scope and restart them.",
+        "screen_msg_audio_hook_off" to "Audio guard disabled. Restart scoped apps to unload the hooks.",
+        "screen_msg_hook_saved" to "Saved configuration only. Hook activation in target apps is not verified.",
+        "screen_hook_desc" to "Experimental AudioManager hook configured. Enable the target app in LSPosed scope and restart it. This cannot prevent onStop() or player.pause().",
+        "screen_root_overlay_required" to "Overlay permission is required for the transparent input guard.",
+        "screen_root_permission_required" to "Root (su) permission is required.",
+        "screen_root_off_failed" to "Physical display power-off failed: ",
+        "screen_root_restore_failed" to "Root display restore failed. Use the emergency ADB commands in docs/ROOT_DISPLAY.md.",
+        "screen_root_off_error" to "Cannot turn off the physical display.",
         "nav_home" to "Home",
         "nav_amoled" to "AMOLED",
         "nav_engines" to "Engines",
