@@ -161,10 +161,9 @@ class RootEngine : IPrivilegeEngine {
         }
         var process: Process? = null
         try {
-            process = ProcessBuilder("su", "-c", cmd)
+            val current = ProcessBuilder("su", "-c", cmd)
                 .redirectErrorStream(true)
-                .start()
-            val current = process
+                .start().also { process = it }
             val output = java.io.ByteArrayOutputStream()
             val readerThread = Thread({
                 try {
