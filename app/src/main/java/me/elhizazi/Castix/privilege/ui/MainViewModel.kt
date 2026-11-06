@@ -99,7 +99,7 @@ class MainViewModel(
                     it.copy(
                         isBlackScreenActive = physical.isOff ||
                             me.elhizazi.Castix.service.BlackScreenOverlayManager.isBlackScreenActive.value,
-                        notificationMessage = if (physical.status == RootDisplayManager.Status.ERROR)
+                        notificationMessage = if (physical.message.isNotBlank())
                             physical.message else it.notificationMessage
                     )
                 }
