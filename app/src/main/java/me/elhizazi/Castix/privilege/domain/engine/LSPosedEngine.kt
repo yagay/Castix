@@ -181,10 +181,10 @@ class LSPosedEngine : IPrivilegeEngine {
                 ServiceHealth(
                     type = EngineType.LSPOSED,
                     status = EngineHealthStatus.ACTIVE,
-                    message = "موديول LSPosed مفعل ونشط (ART Zygisk)",
+                    message = "LSPosed module entry point observed in Castix process",
                     version = "v2.2.0 (API 102)",
                     isUsable = true,
-                    details = "تم تفعيل الموديول بنجاح ضمن نطاق LSPosed، وحقن تجاوزات الصوت بالخلفية نشطة."
+                    details = "Scope was observed for Castix. Target app hooking is not verified; check LSPosed logs and enable opt-in for each selected app."
                 )
             }
             available -> {
