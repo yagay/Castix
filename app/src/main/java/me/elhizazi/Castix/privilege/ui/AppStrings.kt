@@ -16,10 +16,18 @@ data class AppLanguage(
 
 object LanguageRegistry {
     val supportedLanguages: List<AppLanguage>
-        get() = listOf(
+        get() = (listOf(
             AppLanguage(code = "en", nativeName = "English", englishName = "English"),
             AppLanguage(code = "ar", nativeName = "العربية", englishName = "Arabic", isRtl = true)
-        ) + AppStringsSecondary.languages
+        ) + AppStringsSecondary.languages).sortedBy {
+            // Put the two fully supported screen-mode locales first, without
+            // deleting any of the project's existing community translations.
+            when (it.code) {
+                "en" -> 0
+                "zh" -> 1
+                else -> 2
+            }
+        }
 
     fun findLanguage(code: String): AppLanguage {
         val effective = AppStrings.resolveEffectiveLanguage(code)
