@@ -47,7 +47,8 @@ class MainViewModel(
             floatingButtonMode = targetAppsRepo.getFloatingButtonMode(),
             selectedTargetPackages = targetAppsRepo.getSelectedPackages(),
             isAudioFocusGuardEnabled = targetAppsRepo.isAudioFocusGuardEnabled(),
-            preferRootPhysicalDisplay = RootDisplayPreferences.preferRoot(application)
+            preferRootPhysicalDisplay = RootDisplayPreferences.preferRoot(application),
+            rootDisplaySafetyTestMode = RootDisplayPreferences.safetyTestMode(application)
         )
     )
     val uiState: StateFlow<PrivilegeUiState> = _uiState.asStateFlow()
@@ -945,6 +946,25 @@ class MainViewModel(
                 notificationMessage = if (enabled)
                     "Root physical display power selected. Use power/volume-key recovery if touch events are absent."
                 else "AMOLED overlay mode selected (no physical panel power-off)."
+            )
+        }
+    }
+
+    fun setRootDisplaySafetyTestMode(enabled: Boolean) {
+        val app = getApplication<Application>()
+        if (RootDisplayManager.getInstance(app).state.value.isOff) {
+            _uiState.update {
+                it.copy(notificationMessage = "Restore the display before changing the recovery timer.")
+            }
+            return
+        }
+        RootDisplayPreferences.setSafetyTestMode(app, enabled)
+        _uiState.update {
+            it.copy(
+                rootDisplaySafetyTestMode = enabled,
+                notificationMessage = if (enabled)
+                    "Recovery test enabled: automatic display restore after 30 seconds."
+                else "Test disabled: hard recovery watchdog remains active for two hours."
             )
         }
     }
