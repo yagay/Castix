@@ -10,7 +10,9 @@ import androidx.annotation.RequiresApi
 import me.elhizazi.Castix.MainActivity
 import me.elhizazi.Castix.R
 import me.elhizazi.Castix.display.RootDisplayManager
+import me.elhizazi.Castix.display.DisplayMode
 import me.elhizazi.Castix.display.RootDisplayPreferences
+import me.elhizazi.Castix.display.ScreenModeController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,7 +52,8 @@ class BlackScreenTileService : TileService() {
     override fun onClick() {
         super.onClick()
         val app = applicationContext
-        if (!FloatingOverlayManager.canDrawOverlays(app)) {
+        if (RootDisplayPreferences.mode(app) != DisplayMode.SYSTEM_LOCK &&
+            !FloatingOverlayManager.canDrawOverlays(app)) {
             // If overlay permission is not granted, open main app
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -70,24 +73,24 @@ class BlackScreenTileService : TileService() {
             return
         }
 
-        if (RootDisplayPreferences.preferRoot(app)) {
-            runCatching {
-                CastixBackgroundService.start(app)
-                RootDisplayManager.getInstance(app).toggle()
-            }.onFailure { error ->
-                android.util.Log.e("CastixRootTile", "Cannot start root display controller", error)
-            }
-        } else {
-            BlackScreenOverlayManager.getInstance(app).toggleBlackScreen()
-        }
+        ScreenModeController.activate(app)
     }
 
     private fun updateTileState(isActive: Boolean) {
         val tile = qsTile ?: return
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = if (isActive) "Restore display" else "Turn display off"
+        val mode = RootDisplayPreferences.mode(applicationContext)
+        tile.label = when {
+            mode == DisplayMode.SYSTEM_LOCK -> "Lock screen"
+            isActive -> "Restore display"
+            else -> "Turn display off"
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (RootDisplayPreferences.preferRoot(applicationContext)) "Root / Extinguish" else "AMOLED overlay"
+            tile.subtitle = when (mode) {
+                DisplayMode.PHYSICAL_OFF -> "Physical panel · Root"
+                DisplayMode.SYSTEM_LOCK -> "ColorOS keyguard"
+                DisplayMode.AMOLED_OVERLAY -> "AMOLED overlay"
+            }
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_black_screen)
         tile.updateTile()
